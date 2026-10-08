@@ -1,0 +1,844 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Resolve Splash Patcher</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: an editing-suite workspace. Image pool on the left, viewer in the centre,
+   inspector on the right, splash slots as a strip below, actions in a bottom bar. */
+:root {
+  color-scheme: dark;
+  --bg: #111317;
+  --panel: #181b20;
+  --raised: #20242b;
+  --sunken: #0c0e11;
+  --line: #2a2f37;
+  --line-strong: #3a404b;
+  --text: #e5e7eb;
+  --muted: #8a919d;
+  --faint: #5d6470;
+  --accent: #e8913a;
+  --accent-hover: #f2a256;
+  --accent-ink: #1c1206;
+  --accent-soft: rgba(232, 145, 58, .14);
+  --ok: #5bbf8a;
+  --ok-soft: rgba(91, 191, 138, .13);
+  --warn: #e3b34c;
+  --warn-soft: rgba(227, 179, 76, .13);
+  --err: #e2685c;
+  --err-soft: rgba(226, 104, 92, .13);
+  --checker-a: #1d2026;
+  --checker-b: #23272e;
+  --font-ui: "Manrope", "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  --font-data: "JetBrains Mono", "Cascadia Mono", Consolas, monospace;
+  --r-sm: 6px;
+  --r-md: 10px;
+  --gap: 14px;
+}
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html, body { height: 100%; margin: 0; }
+body {
+  background: var(--bg); color: var(--text); font: 500 13.5px/1.45 var(--font-ui);
+  overflow: hidden; -webkit-font-smoothing: antialiased;
+}
+button, select, input { font: inherit; color: inherit; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+.app {
+  height: 100%; display: grid; gap: var(--gap); padding: 12px 16px 0;
+  grid-template-rows: auto minmax(260px, 1.15fr) minmax(200px, 1fr) auto;
+}
+
+/* ---------- header ---------- */
+.top { display: flex; align-items: center; gap: 12px; min-width: 0; flex-wrap: wrap; }
+.brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-size: 15px; letter-spacing: .01em; }
+.brand-mark { width: 26px; height: 18px; border-radius: 4px; border: 1.5px solid var(--accent); position: relative; flex: none; }
+.brand-mark::after { content: ""; position: absolute; inset: 3px 9px 3px 3px; border-radius: 2px; background: var(--accent); }
+.chip {
+  font-family: var(--font-data); font-size: 12px; color: var(--muted);
+  padding: 3px 8px; border: 1px solid var(--line); border-radius: 999px; white-space: nowrap;
+}
+.pill {
+  display: inline-flex; align-items: center; gap: 7px; font-size: 12.5px; font-weight: 600;
+  padding: 4px 11px 4px 9px; border-radius: 999px; background: var(--raised); color: var(--muted); white-space: nowrap;
+}
+.pill::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.pill.ok { background: var(--ok-soft); color: var(--ok); }
+.pill.warn { background: var(--warn-soft); color: var(--warn); }
+.pill.err { background: var(--err-soft); color: var(--err); }
+.spacer { flex: 1; }
+.path {
+  display: flex; align-items: center; gap: 8px; min-width: 0; max-width: 46ch;
+  background: none; border: 1px solid var(--line); border-radius: var(--r-sm); padding: 5px 10px; cursor: pointer;
+}
+.path:hover { border-color: var(--line-strong); background: var(--raised); }
+.path span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; direction: rtl; font-size: 12px; color: var(--muted); }
+.path b { font-weight: 600; font-size: 12px; white-space: nowrap; }
+.lang { display: inline-flex; border: 1px solid var(--line); border-radius: var(--r-sm); overflow: hidden; }
+.lang button {
+  background: none; border: 0; padding: 5px 10px; font-family: var(--font-data); font-size: 12px; color: var(--muted); cursor: pointer;
+}
+.lang button + button { border-left: 1px solid var(--line); }
+.lang button[aria-pressed="true"] { background: var(--raised); color: var(--text); }
+
+/* ---------- workspace ---------- */
+.work {
+  display: grid; gap: var(--gap); min-height: 0;
+  grid-template-columns: minmax(220px, 280px) minmax(0, 1fr) minmax(240px, 290px);
+}
+.panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r-md); min-height: 0; min-width: 0; }
+.panel-head { display: flex; align-items: center; gap: 8px; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+.panel-head h2 { margin: 0; font-size: 13px; font-weight: 700; letter-spacing: .02em; }
+.panel-head .count { color: var(--faint); font-family: var(--font-data); font-size: 12px; }
+
+/* pool */
+.pool { display: flex; flex-direction: column; }
+.pool-list { flex: 1; min-height: 0; overflow-y: auto; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+.pool-item {
+  display: grid; grid-template-columns: 96px minmax(0, 1fr); gap: 10px; align-items: center;
+  padding: 6px; border-radius: var(--r-sm); border: 1px solid transparent; cursor: pointer; background: none; text-align: left;
+}
+.pool-item:hover { background: var(--raised); }
+.pool-item.sel { background: var(--accent-soft); border-color: rgba(232, 145, 58, .45); }
+.pool-item canvas { width: 96px; height: auto; aspect-ratio: 1110 / 490; display: block; }
+.pool-item .name { font-weight: 600; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pool-item .meta { font-size: 11.5px; color: var(--muted); }
+.drop {
+  margin: 8px; padding: 14px 12px; border: 1.5px dashed var(--line-strong); border-radius: var(--r-md);
+  text-align: center; color: var(--muted); font-size: 12.5px; cursor: pointer; background: none; display: block; width: calc(100% - 16px);
+}
+.drop strong { color: var(--text); display: block; font-size: 13px; margin-bottom: 2px; }
+.drop:hover, body.dragging .drop { border-color: var(--accent); color: var(--text); background: var(--accent-soft); }
+
+/* viewer */
+.viewer { display: flex; flex-direction: column; }
+.viewer .panel-head { flex-wrap: wrap; row-gap: 6px; }
+.viewer-title { font-weight: 700; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stage {
+  flex: 1; min-height: 0; display: grid; place-items: center; padding: 16px; overflow: hidden;
+  background-color: var(--sunken);
+  background-image: conic-gradient(var(--checker-a) 25%, var(--checker-b) 0 50%, var(--checker-a) 0 75%, var(--checker-b) 0);
+  background-size: 18px 18px;
+}
+.stage canvas { cursor: grab; touch-action: none; display: block; }
+.stage canvas.dragging { cursor: grabbing; }
+.stage canvas.locked { cursor: default; }
+.stage-hint { font-size: 11.5px; color: var(--faint); padding: 7px 14px; border-top: 1px solid var(--line); }
+.empty { color: var(--muted); text-align: center; max-width: 36ch; }
+.empty strong { display: block; color: var(--text); font-size: 15px; margin-bottom: 4px; }
+
+/* inspector */
+.inspector { display: flex; flex-direction: column; overflow-y: auto; }
+.controls { padding: 12px 14px; display: grid; gap: 12px; }
+.ctl { display: grid; gap: 6px; }
+.ctl-row { display: flex; justify-content: space-between; align-items: baseline; }
+.ctl label { font-size: 12.5px; font-weight: 600; }
+.ctl output { font-family: var(--font-data); font-size: 12px; color: var(--muted); }
+input[type=range] { -webkit-appearance: none; appearance: none; width: 100%; height: 18px; background: none; margin: 0; }
+input[type=range]::-webkit-slider-runnable-track {
+  height: 4px; border-radius: 2px;
+  background: linear-gradient(to right, var(--accent) 0 var(--p, 50%), var(--line-strong) var(--p, 50%) 100%);
+}
+input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none; width: 14px; height: 14px; margin-top: -5px; border-radius: 50%;
+  background: var(--text); border: 3px solid var(--panel); box-shadow: 0 0 0 1px var(--line-strong);
+}
+input[type=range]:disabled { opacity: .35; }
+.check { display: grid; grid-template-columns: 18px minmax(0, 1fr); gap: 4px 10px; cursor: pointer; align-items: start; }
+.check input {
+  -webkit-appearance: none; appearance: none; width: 18px; height: 18px; margin: 1px 0 0; border-radius: 4px;
+  border: 1.5px solid var(--line-strong); background: var(--raised); display: grid; place-items: center; cursor: pointer;
+}
+.check input:checked { background: var(--accent); border-color: var(--accent); }
+.check input:checked::after {
+  content: ""; width: 5px; height: 9px; border: solid var(--accent-ink); border-width: 0 2px 2px 0; transform: translateY(-1px) rotate(45deg);
+}
+.check .label { font-size: 12.5px; font-weight: 600; }
+.check .note { grid-column: 2; }
+.check.compact { display: inline-grid; align-items: center; white-space: nowrap; margin-right: 6px; }
+.check.compact input { margin: 0; }
+.note { font-size: 12px; color: var(--muted); }
+.section-label { font-size: 11px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--faint); }
+.used { display: flex; flex-wrap: wrap; gap: 5px; }
+.used .chip { color: var(--text); }
+.row { display: flex; gap: 8px; flex-wrap: wrap; }
+
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  padding: 7px 13px; border-radius: var(--r-sm); border: 1px solid var(--line-strong);
+  background: var(--raised); font-weight: 600; font-size: 12.5px; cursor: pointer; white-space: nowrap;
+}
+.btn:hover:not(:disabled) { border-color: var(--faint); background: #272c34; }
+.btn:disabled { opacity: .45; cursor: default; }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 700; padding: 8px 20px; }
+.btn.primary:hover:not(:disabled) { background: var(--accent-hover); border-color: var(--accent-hover); }
+.btn.ghost { background: none; border-color: transparent; color: var(--muted); }
+.btn.ghost:hover:not(:disabled) { color: var(--text); background: var(--raised); border-color: transparent; }
+.btn.danger:hover:not(:disabled) { color: var(--err); }
+
+/* ---------- slot strip ---------- */
+.strip { display: flex; flex-direction: column; }
+.strip .panel-head { flex-wrap: wrap; }
+.legend { font-size: 12px; color: var(--muted); }
+.slots {
+  flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; padding: 12px;
+  display: grid; gap: 10px; grid-template-columns: repeat(auto-fill, minmax(330px, 1fr)); align-content: start;
+}
+.slot {
+  border: 1px solid var(--line); border-radius: var(--r-md); background: var(--raised);
+  padding: 8px 10px 10px; display: grid; gap: 8px; cursor: pointer; min-width: 0;
+}
+.slot:hover { border-color: var(--line-strong); }
+.slot.uses-sel { border-color: rgba(232, 145, 58, .55); box-shadow: inset 0 0 0 1px rgba(232, 145, 58, .35); }
+.slot.focus { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.slot-head { display: flex; align-items: center; gap: 8px; }
+.slot-num { font-family: var(--font-data); font-weight: 500; font-size: 13px; color: var(--muted); min-width: 2ch; }
+.slot.uses-sel .slot-num, .slot.focus .slot-num { color: var(--accent); }
+.slot select {
+  margin-left: auto; min-width: 0; max-width: 62%; background: var(--panel); border: 1px solid var(--line-strong);
+  border-radius: var(--r-sm); padding: 3px 6px; font-size: 12px;
+}
+.pair { display: grid; grid-template-columns: minmax(0, 1fr) 16px minmax(0, 1fr); align-items: center; gap: 6px; }
+.pair figure { margin: 0; display: grid; gap: 3px; min-width: 0; }
+.pair img, .pair canvas { width: 100%; height: auto; aspect-ratio: 1110 / 490; display: block; }
+.pair img { opacity: .8; }
+.pair figcaption {
+  font-size: 10.5px; color: var(--faint); letter-spacing: .04em; text-transform: uppercase;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pair .arrow { color: var(--faint); text-align: center; font-size: 13px; }
+.slot.keep .pair canvas { opacity: .8; }
+
+/* ---------- bottom bar ---------- */
+.bar { display: flex; align-items: center; gap: 12px; padding: 10px 0 14px; flex-wrap: wrap; }
+.progress { width: 220px; height: 4px; background: var(--line); border-radius: 2px; overflow: hidden; flex: none; }
+.progress i { display: block; height: 100%; width: 0; background: var(--accent); transition: width .25s; }
+.bar .msg { color: var(--muted); font-size: 12.5px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1; }
+.switch { display: inline-flex; align-items: center; gap: 9px; cursor: pointer; font-size: 12.5px; font-weight: 600; user-select: none; }
+.switch input { position: absolute; opacity: 0; pointer-events: none; }
+.switch .track { width: 32px; height: 18px; border-radius: 9px; background: var(--line-strong); position: relative; transition: background .15s; }
+.switch .track::after { content: ""; position: absolute; left: 2px; top: 2px; width: 14px; height: 14px; border-radius: 50%; background: var(--text); transition: transform .15s; }
+.switch input:checked + .track { background: var(--accent); }
+.switch input:checked + .track::after { transform: translateX(14px); }
+.switch input:focus-visible + .track { outline: 2px solid var(--accent); outline-offset: 2px; }
+
+/* ---------- modal & toast ---------- */
+.scrim { position: fixed; inset: 0; background: rgba(5, 6, 8, .62); display: grid; place-items: center; z-index: 10; }
+.modal { background: var(--panel); border: 1px solid var(--line-strong); border-radius: 12px; padding: 20px 22px; width: min(440px, calc(100% - 32px)); display: grid; gap: 14px; }
+.modal h3 { margin: 0; font-size: 15px; }
+.modal p { margin: 0; color: var(--muted); }
+.modal .row { justify-content: flex-end; }
+.toasts { position: fixed; right: 16px; bottom: 70px; display: grid; gap: 8px; z-index: 11; }
+.toast { background: var(--raised); border: 1px solid var(--line-strong); border-left: 3px solid var(--ok); border-radius: var(--r-sm); padding: 10px 14px; max-width: 420px; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
+.toast.err { border-left-color: var(--err); }
+
+@media (max-width: 1100px) {
+  body { overflow-y: auto; }
+  .app { height: auto; min-height: 100%; grid-template-rows: auto auto auto auto; }
+  .work { grid-template-columns: minmax(200px, 250px) minmax(0, 1fr); grid-template-rows: minmax(280px, 48vh) auto; }
+  .inspector { grid-column: 1 / -1; overflow: visible; }
+  .controls { grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); align-items: start; }
+  .strip { min-height: 360px; }
+  .slots { overflow: visible; }
+}
+@media (max-width: 720px) {
+  .work { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(220px, 40vh) auto; }
+  .pool-list { max-height: 220px; }
+  .slots { grid-template-columns: minmax(0, 1fr); }
+  .legend { display: none; }
+}
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <div class="brand"><span class="brand-mark" aria-hidden="true"></span>Splash Patcher</div>
+    <span class="chip" id="version">Resolve —</span>
+    <span class="pill" id="status" data-i18n="reading"></span>
+    <span class="pill warn" id="running" hidden data-i18n="running"></span>
+    <span class="spacer"></span>
+    <button class="path" id="pathBtn" data-i18n-title="pathTitle"><span id="pathText"></span><b data-i18n="change"></b></button>
+    <div class="lang" role="group" aria-label="Language">
+      <button id="langEn" data-lang="en" aria-pressed="true">EN</button><button id="langRu" data-lang="ru" aria-pressed="false">RU</button>
+    </div>
+  </header>
+
+  <main class="work">
+    <aside class="panel pool">
+      <div class="panel-head"><h2 data-i18n="images"></h2><span class="count" id="poolCount"></span></div>
+      <div class="pool-list" id="pool"></div>
+      <button class="drop" id="drop"><strong data-i18n="addImages"></strong><span data-i18n="orDrop"></span></button>
+      <input type="file" id="file" accept="image/*" multiple hidden>
+    </aside>
+
+    <section class="panel viewer">
+      <div class="panel-head">
+        <span class="viewer-title" id="viewerTitle"></span>
+        <span class="spacer"></span>
+        <label class="check compact" data-i18n-title="darkenNote"><input type="checkbox" id="darken"><span class="label" data-i18n="darken"></span></label>
+        <span class="chip" id="sizes">1110 × 490 · @2x 2220 × 980</span>
+      </div>
+      <div class="stage" id="stage">
+        <canvas id="view" width="1110" height="490"></canvas>
+        <div class="empty" id="viewEmpty" hidden><strong data-i18n="emptyTitle"></strong><span data-i18n="emptyText"></span></div>
+      </div>
+      <div class="stage-hint" data-i18n="hint"></div>
+    </section>
+
+    <aside class="panel inspector">
+      <div class="panel-head"><h2 data-i18n="framing"></h2></div>
+      <div class="controls">
+        <div class="ctl"><div class="ctl-row"><label for="fx" data-i18n="horizontal"></label><output id="fxOut"></output></div><input type="range" id="fx" min="0" max="1" step="0.001"></div>
+        <div class="ctl"><div class="ctl-row"><label for="fy" data-i18n="vertical"></label><output id="fyOut"></output></div><input type="range" id="fy" min="0" max="1" step="0.001"></div>
+        <div class="ctl"><div class="ctl-row"><label for="zoom" data-i18n="zoom"></label><output id="zoomOut"></output></div><input type="range" id="zoom" min="1" max="4" step="0.01"></div>
+        <div class="row"><button class="btn" id="resetBtn" data-i18n="resetFraming"></button><button class="btn ghost danger" id="delBtn" data-i18n="remove"></button></div>
+        <div class="ctl"><span class="section-label" data-i18n="usedIn"></span><div class="used" id="used"></div></div>
+      </div>
+    </aside>
+  </main>
+
+  <section class="panel strip">
+    <div class="panel-head">
+      <h2 data-i18n="slotsTitle"></h2><span class="count" id="slotCount"></span>
+      <span class="legend" data-i18n="slotsLegend"></span>
+      <span class="spacer"></span>
+      <button class="btn ghost" id="autoBtn" data-i18n="allAuto"></button>
+    </div>
+    <div class="slots" id="slots"></div>
+  </section>
+
+  <footer class="bar">
+    <div class="progress" aria-hidden="true"><i id="prog"></i></div>
+    <span class="msg" id="msg"></span>
+    <label class="switch" data-i18n-title="autopatchTitle">
+      <input type="checkbox" id="task"><span class="track"></span><span data-i18n="autopatch"></span>
+    </label>
+    <button class="btn" id="restoreBtn" data-i18n="restore"></button>
+    <button class="btn primary" id="applyBtn" data-i18n="apply"></button>
+  </footer>
+</div>
+<div class="toasts" id="toasts"></div>
+
+<script>
+"use strict";
+// ---------------- strings ----------------
+const I18N = {
+  en: {
+    reading: "Reading Resolve…", running: "Resolve is running", pathTitle: "Choose another Resolve", change: "Change",
+    images: "Images", addImages: "Add images", orDrop: "or drop files here",
+    preview: "Preview", emptyTitle: "Add your first image", emptyText: "Any size works: it is cropped to the splash format.",
+    hint: "Drag the image to move it, scroll to zoom, double-click to reset the framing.",
+    framing: "Framing", horizontal: "Horizontal", vertical: "Vertical", zoom: "Zoom",
+    resetFraming: "Reset framing", remove: "Remove", usedIn: "Used in slots",
+    usedNone: "None yet. Pick this image in a slot's list.", slotKept: "This slot keeps the original.", pickLeft: "Pick an image on the left.",
+    darken: "Darken left side (all images)",
+    darkenNote: "Adds the same dark panel as the stock splash screens, so Resolve's title and loading text stay readable.",
+    slotsTitle: "Splash slots", slotsLegend: "Resolve picks a slot on every launch. Original on the left, replacement on the right.",
+    allAuto: "All slots: rotate", autoOpt: "Auto (rotate)", originalOpt: "Original",
+    capOriginal: "original", capUnchanged: "unchanged", slot: "Slot", slotOriginal: "original",
+    autopatch: "Re-apply after Resolve updates", autopatchTitle: "A scheduled task re-applies your splash screens after Resolve updates",
+    restore: "Restore original", apply: "Apply",
+    statusPatched: "Splash screens replaced", statusPartial: "Not every set is replaced, click Apply", statusOriginal: "Original splash screens",
+    notAssigned: "not assigned", uploading: "Uploading {i} of {n}: {name}",
+    deleteTitle: "Remove this image?", deleteText: "“{name}” will be removed from the list. Slots that use it switch to Auto.",
+    cancel: "Cancel", runningTitle: "Resolve is running",
+    runningText: "Close DaVinci Resolve first, otherwise the file can't be changed. Continue anyway?", continue: "Continue",
+    applied: "Done: {n} {images} written to both sets ({mb} MB). Start Resolve.", quantized: " Reduced to 256 colours: {list}.",
+    restoreTitle: "Restore the original splash screens?",
+    restoreText: "Resolve will be restored from the backup. Your images and settings stay here.", restoreOk: "Restore",
+    restoredMsg: "Original splash screens restored",
+    taskOn: "Auto re-apply is on: your splash screens come back after Resolve updates", taskOff: "Auto re-apply is off",
+  },
+  ru: {
+    reading: "Чтение Resolve…", running: "Resolve запущен", pathTitle: "Выбрать другой Resolve", change: "Изменить",
+    images: "Изображения", addImages: "Добавить изображения", orDrop: "или перетащите файлы сюда",
+    preview: "Предпросмотр", emptyTitle: "Добавьте первое изображение", emptyText: "Подойдёт картинка любого размера: она будет обрезана под формат заставки.",
+    hint: "Перетаскивайте картинку мышью, колесо меняет масштаб, двойной клик сбрасывает кадр.",
+    framing: "Кадр", horizontal: "По горизонтали", vertical: "По вертикали", zoom: "Масштаб",
+    resetFraming: "Сбросить кадр", remove: "Удалить", usedIn: "Используется в слотах",
+    usedNone: "Ни в одном. Выберите картинку в списке слота.", slotKept: "Слот оставлен оригинальным.", pickLeft: "Выберите изображение слева.",
+    darken: "Затемнять слева (все изображения)",
+    darkenNote: "Добавляет такую же тёмную панель, как у стандартных заставок: название и текст загрузки Resolve остаются читаемыми.",
+    slotsTitle: "Слоты заставки", slotsLegend: "Resolve сам выбирает слот при каждом запуске. Слева оригинал, справа замена.",
+    allAuto: "Все слоты: по кругу", autoOpt: "Авто (по кругу)", originalOpt: "Оригинал",
+    capOriginal: "оригинал", capUnchanged: "без изменений", slot: "Слот", slotOriginal: "оригинал",
+    autopatch: "Автопатч после обновлений", autopatchTitle: "Задача Планировщика заново применяет заставки после обновления Resolve",
+    restore: "Восстановить оригинал", apply: "Применить",
+    statusPatched: "Заставки заменены", statusPartial: "Заменены не все наборы, нажмите «Применить»", statusOriginal: "Оригинальные заставки",
+    notAssigned: "не назначено", uploading: "Загрузка {i} из {n}: {name}",
+    deleteTitle: "Удалить изображение?", deleteText: "«{name}» будет убрано из списка. Слоты с ним перейдут в режим «Авто».",
+    cancel: "Отмена", runningTitle: "Resolve запущен",
+    runningText: "Закройте DaVinci Resolve, иначе файл нельзя изменить. Всё равно продолжить?", continue: "Продолжить",
+    applied: "Готово: {n} {images} записано в оба набора ({mb} МБ). Запустите Resolve.", quantized: " Сжаты палитрой: {list}.",
+    restoreTitle: "Вернуть оригинальные заставки?",
+    restoreText: "Resolve будет восстановлен из резервной копии. Ваши изображения и настройки останутся здесь.", restoreOk: "Восстановить",
+    restoredMsg: "Оригинальные заставки восстановлены",
+    taskOn: "Автопатч включён: заставки вернутся после обновления Resolve", taskOff: "Автопатч выключен",
+  },
+};
+let LANG = "en";
+function t(key, vars = {}) {
+  const s = (I18N[LANG] && I18N[LANG][key]) ?? I18N.en[key] ?? key;
+  return s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "");
+}
+// count phrases: "in 3 slots" / "в 3 слотах", "2 images" / "2 изображения"
+function inSlots(n) {
+  if (LANG === "ru") return `в ${n} ${ruPlural(n, "слоте", "слотах", "слотах")}`;
+  return `in ${n} ${n === 1 ? "slot" : "slots"}`;
+}
+function imagesWord(n) {
+  return LANG === "ru" ? ruPlural(n, "изображение", "изображения", "изображений") : (n === 1 ? "image" : "images");
+}
+const ruPlural = (n, a, b, c) => (n % 10 === 1 && n % 100 !== 11) ? a : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? b : c;
+
+function applyLang() {
+  document.documentElement.lang = LANG;
+  document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
+  document.querySelectorAll("[data-i18n-title]").forEach(el => { el.title = t(el.dataset.i18nTitle); });
+  $("langEn").setAttribute("aria-pressed", LANG === "en");
+  $("langRu").setAttribute("aria-pressed", LANG === "ru");
+}
+
+// ---------------- state ----------------
+const $ = (id) => document.getElementById(id);
+const S = { state: null, images: [], slotCfg: {}, darken: true, sel: null, focusSlot: null, tpl: null, box: null,
+            bmp: {}, thumbBmp: {}, origImg: {}, busy: false };
+
+// ---------------- API ----------------
+async function api(path, opts = {}) {
+  const r = await fetch("api/" + path, opts);
+  const ct = r.headers.get("Content-Type") || "";
+  const data = ct.includes("json") ? await r.json() : await r.blob();
+  if (!r.ok) throw new Error((data && data.error) || r.statusText);
+  return data;
+}
+const post = (path, body) => api(path, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body || {}) });
+const configBody = () => ({
+  images: S.images.map(({ id, fx, fy, zoom }) => ({ id, fx, fy, zoom })),
+  slots: S.slotCfg, darken: S.darken, lang: LANG,
+});
+let saveTimer = null;
+function saveSoon() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => post("config", configBody()).catch(e => toast(e.message, true)), 350);
+}
+
+// ---------------- rendering (mirrors render_splash / darken_alpha in splash_patcher.py) ----------------
+const DARK = { rgb: "24,29,37", alpha: 0.94, solid: 0.30, end: 0.62 };
+function darkenAlpha(x) {
+  if (x <= DARK.solid) return DARK.alpha;
+  if (x >= DARK.end) return 0;
+  const u = (x - DARK.solid) / (DARK.end - DARK.solid);
+  return DARK.alpha * (1 - u * u * (3 - 2 * u));
+}
+function cropBox(sw, sh, w, h, fx, fy, zoom) {
+  const a = w / h; let cw, ch;
+  if (sw / sh > a) { ch = sh; cw = sh * a; } else { cw = sw; ch = sw / a; }
+  zoom = Math.max(1, zoom); cw /= zoom; ch /= zoom;
+  return [(sw - cw) * fx, (sh - ch) * fy, cw, ch];
+}
+function drawSplash(canvas, bmp, p) {
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height, s = W / S.tpl.width;
+  ctx.globalCompositeOperation = "source-over";
+  ctx.clearRect(0, 0, W, H);
+  ctx.drawImage(S.tpl, 0, 0, W, H);
+  if (!bmp) return;
+  const [x0, y0, x1, y1] = S.box.map(v => v * s), w = x1 - x0, h = y1 - y0;
+  const [l, tp, cw, ch] = cropBox(bmp.width, bmp.height, w, h, p.fx, p.fy, p.zoom);
+  ctx.globalCompositeOperation = "source-atop";
+  ctx.imageSmoothingQuality = "high";
+  ctx.drawImage(bmp, l, tp, cw, ch, x0, y0, w, h);
+  if (S.darken) {
+    const g = ctx.createLinearGradient(x0, 0, x0 + w, 0);
+    for (let i = 0; i <= 40; i++) { const k = i / 40; g.addColorStop(k, `rgba(${DARK.rgb},${darkenAlpha(k).toFixed(4)})`); }
+    ctx.fillStyle = g; ctx.fillRect(x0, y0, w, h);
+  }
+  ctx.globalCompositeOperation = "source-over";
+}
+async function loadBitmap(id) {
+  if (!S.bmp[id]) {
+    S.bmp[id] = (async () => {
+      const blob = await api("src/" + id);
+      const big = await createImageBitmap(blob);
+      const k = Math.min(1, 900 / big.width);
+      S.thumbBmp[id] = await createImageBitmap(big, { resizeWidth: Math.round(big.width * k), resizeHeight: Math.round(big.height * k), resizeQuality: "high" });
+      return big;
+    })();
+  }
+  return S.bmp[id];
+}
+const img = (id) => S.images.find(i => i.id === id);
+
+// ---------------- slots ----------------
+// null = keep the original, missing = "auto" (same rule as effective_slots() in Python)
+const slotValue = (n) => (String(n) in S.slotCfg ? S.slotCfg[String(n)] : "auto");
+function effective() {
+  const ids = S.images.map(i => i.id), out = {};
+  (S.state?.slots || []).forEach((n, i) => {
+    const v = slotValue(n);
+    out[n] = v === "auto" ? (ids.length ? ids[i % ids.length] : null) : (ids.includes(v) ? v : null);
+  });
+  return out;
+}
+const pad = (n) => String(n).padStart(2, "0");
+
+function buildSlots() {
+  const box = $("slots"); box.innerHTML = "";
+  $("slotCount").textContent = S.state?.slots?.length || "";
+  for (const n of S.state?.slots || []) {
+    const el = document.createElement("div");
+    el.className = "slot"; el.dataset.n = n; el.tabIndex = 0;
+    el.innerHTML = `
+      <div class="slot-head"><span class="slot-num">${pad(n)}</span><select id="slot-${n}" aria-label="${t("slot")} ${n}"></select></div>
+      <div class="pair">
+        <figure><img alt="" src="api/orig/${n}"><figcaption>${t("capOriginal")}</figcaption></figure>
+        <span class="arrow">→</span>
+        <figure><canvas width="444" height="196"></canvas><figcaption class="cap"></figcaption></figure>
+      </div>`;
+    const sel = el.querySelector("select");
+    const cur = slotValue(n);
+    const opts = [["auto", t("autoOpt")], ["", t("originalOpt")], ...S.images.map((im, i) => [im.id, `${i + 1}. ${im.name}`])];
+    for (const [v, txt] of opts) sel.add(new Option(txt, v));
+    sel.value = cur === null ? "" : (cur === "auto" || S.images.some(i => i.id === cur) ? cur : "");
+    sel.addEventListener("click", e => e.stopPropagation());
+    sel.addEventListener("change", () => {
+      S.slotCfg[String(n)] = sel.value === "" ? null : sel.value;
+      saveSoon(); renderPool(); refreshSlots(); focusSlot(n);
+    });
+    el.addEventListener("click", () => focusSlot(n));
+    el.addEventListener("keydown", e => { if (e.key === "Enter") focusSlot(n); });
+    box.appendChild(el);
+  }
+  refreshSlots();
+}
+async function refreshSlots(onlyId) {
+  const eff = effective();
+  for (const el of $("slots").children) {
+    const n = +el.dataset.n, id = eff[n];
+    if (onlyId && id !== onlyId) continue;
+    el.classList.toggle("uses-sel", !!id && id === S.sel && S.focusSlot !== n);
+    el.classList.toggle("focus", S.focusSlot === n);
+    el.classList.toggle("keep", !id);
+    const c = el.querySelector("canvas"), cap = el.querySelector(".cap");
+    if (id) {
+      cap.textContent = img(id).name;
+      await loadBitmap(id);
+      drawSplash(c, S.thumbBmp[id], img(id));
+    } else {
+      cap.textContent = t("capUnchanged");
+      const o = await origImage(n);
+      const ctx = c.getContext("2d"); ctx.clearRect(0, 0, c.width, c.height); ctx.drawImage(o, 0, 0, c.width, c.height);
+    }
+  }
+}
+function markSlots() {
+  const eff = effective();
+  for (const el of $("slots").children) {
+    const n = +el.dataset.n;
+    el.classList.toggle("uses-sel", !!eff[n] && eff[n] === S.sel && S.focusSlot !== n);
+    el.classList.toggle("focus", S.focusSlot === n);
+  }
+}
+function origImage(n) {
+  if (!S.origImg[n]) S.origImg[n] = new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = rej; i.src = "api/orig/" + n; });
+  return S.origImg[n];
+}
+function focusSlot(n) {
+  S.focusSlot = n;
+  const id = effective()[n];
+  if (id) select(id, true); else { S.sel = null; renderPool(); renderInspector(); renderView(); markSlots(); }
+}
+
+// ---------------- pool ----------------
+function renderPool() {
+  const pool = $("pool"); pool.innerHTML = "";
+  $("poolCount").textContent = S.images.length || "";
+  const eff = effective();
+  S.images.forEach((im, i) => {
+    const uses = Object.values(eff).filter(v => v === im.id).length;
+    const b = document.createElement("button");
+    b.className = "pool-item" + (im.id === S.sel ? " sel" : "");
+    b.innerHTML = `<canvas width="288" height="127"></canvas><div style="min-width:0"><div class="name"></div><div class="meta"></div></div>`;
+    b.querySelector(".name").textContent = `${i + 1}. ${im.name}`;
+    b.querySelector(".meta").textContent = uses ? inSlots(uses) : t("notAssigned");
+    b.addEventListener("click", () => { S.focusSlot = null; select(im.id); });
+    pool.appendChild(b);
+    loadBitmap(im.id).then(() => drawSplash(b.querySelector("canvas"), S.thumbBmp[im.id], im));
+  });
+}
+function redrawPoolThumbs(id) {
+  S.images.forEach((im, i) => {
+    if (id && im.id !== id) return;
+    const c = $("pool").children[i]?.querySelector("canvas");
+    if (c && S.thumbBmp[im.id]) drawSplash(c, S.thumbBmp[im.id], im);
+  });
+}
+
+// ---------------- selection / viewer / inspector ----------------
+function select(id, fromSlot) {
+  S.sel = id;
+  if (!fromSlot) S.focusSlot = null;
+  renderPool(); renderInspector(); markSlots(); renderView();
+}
+const viewCanvas = $("view");
+function sizeViewCanvas() {
+  // fit the canvas into the stage while keeping the 1110:490 splash ratio
+  const st = $("stage"), cs = getComputedStyle(st);
+  const aw = st.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+  const ah = st.clientHeight - parseFloat(cs.paddingTop) - parseFloat(cs.paddingBottom);
+  const ratio = 1110 / 490;
+  const cssW = Math.max(120, Math.floor(Math.min(aw, ah * ratio)));
+  viewCanvas.style.width = cssW + "px";
+  viewCanvas.style.height = Math.round(cssW / ratio) + "px";
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const w = Math.max(555, Math.min(2220, Math.round(cssW * dpr)));
+  if (Math.abs(viewCanvas.width - w) > 8) { viewCanvas.width = w; viewCanvas.height = Math.round(w / ratio); return true; }
+  return false;
+}
+let viewSeq = 0;
+function renderView() {
+  // every call supersedes the previous one, so a slow image load never overwrites a newer frame
+  const seq = ++viewSeq;
+  Promise.resolve().then(() => drawView(seq));
+}
+async function drawView(seq) {
+  if (!S.tpl || seq !== viewSeq) return;
+  const showCanvas = S.images.length > 0 || S.focusSlot != null;
+  $("viewEmpty").hidden = showCanvas;
+  viewCanvas.hidden = !showCanvas;
+  if (S.sel) {
+    const im = img(S.sel);
+    $("viewerTitle").textContent = (S.focusSlot ? `${t("slot")} ${pad(S.focusSlot)} · ` : "") + im.name;
+    viewCanvas.classList.remove("locked");
+    const bmp = await loadBitmap(S.sel);
+    if (seq !== viewSeq) return;
+    drawSplash(viewCanvas, bmp, im);
+  } else if (S.focusSlot != null) {
+    $("viewerTitle").textContent = `${t("slot")} ${pad(S.focusSlot)} · ${t("slotOriginal")}`;
+    viewCanvas.classList.add("locked");
+    const o = await origImage(S.focusSlot);
+    if (seq !== viewSeq) return;
+    const ctx = viewCanvas.getContext("2d"); ctx.clearRect(0, 0, viewCanvas.width, viewCanvas.height);
+    ctx.drawImage(o, 0, 0, viewCanvas.width, viewCanvas.height);
+  } else {
+    $("viewerTitle").textContent = t("preview");
+    drawSplash(viewCanvas, null, {});
+  }
+}
+const CTL = { fx: v => Math.round(v * 100) + "%", fy: v => Math.round(v * 100) + "%", zoom: v => v.toFixed(2) + "×" };
+function setRangeFill(el) { el.style.setProperty("--p", ((el.value - el.min) / (el.max - el.min) * 100) + "%"); }
+function renderInspector() {
+  const im = S.sel ? img(S.sel) : null;
+  for (const k of Object.keys(CTL)) {
+    const el = $(k); el.disabled = !im;
+    if (im) el.value = im[k];
+    $(k + "Out").textContent = im ? CTL[k](im[k]) : "—";
+    setRangeFill(el);
+  }
+  $("resetBtn").disabled = $("delBtn").disabled = !im;
+  $("darken").checked = S.darken;
+  const used = $("used"); used.innerHTML = "";
+  if (im) {
+    const eff = effective();
+    const nums = Object.keys(eff).filter(n => eff[n] === im.id);
+    if (!nums.length) used.innerHTML = `<span class="note">${t("usedNone")}</span>`;
+    for (const n of nums) { const c = document.createElement("span"); c.className = "chip"; c.textContent = pad(n); used.appendChild(c); }
+  } else {
+    used.innerHTML = `<span class="note">${S.focusSlot ? t("slotKept") : t("pickLeft")}</span>`;
+  }
+}
+let thumbTimer = null;
+function changed(k, v) {
+  const im = img(S.sel); if (!im) return;
+  im[k] = v; $(k).value = v; $(k + "Out").textContent = CTL[k](v); setRangeFill($(k));
+  renderView(); saveSoon();
+  clearTimeout(thumbTimer);
+  thumbTimer = setTimeout(() => { redrawPoolThumbs(im.id); refreshSlots(im.id); }, 60);
+}
+for (const k of Object.keys(CTL)) $(k).addEventListener("input", e => changed(k, parseFloat(e.target.value)));
+$("resetBtn").onclick = () => { for (const [k, v] of Object.entries({ fx: .5, fy: .5, zoom: 1 })) changed(k, v); };
+$("darken").onchange = e => {
+  S.darken = e.target.checked;
+  saveSoon(); renderView(); redrawPoolThumbs(); refreshSlots();
+};
+$("delBtn").onclick = async () => {
+  const im = img(S.sel); if (!im) return;
+  if (!await confirmBox(t("deleteTitle"), t("deleteText", { name: im.name }), t("remove"))) return;
+  await post("delete/" + im.id);
+  S.sel = null; S.focusSlot = null;
+  await reload();
+};
+
+// drag to pan, wheel to zoom, double click to reset
+let drag = null;
+viewCanvas.addEventListener("pointerdown", async e => {
+  const im = S.sel && img(S.sel); if (!im) return;
+  const bmp = await loadBitmap(S.sel);
+  const r = viewCanvas.getBoundingClientRect();
+  const w = (S.box[2] - S.box[0]) / S.tpl.width * r.width, h = (S.box[3] - S.box[1]) / S.tpl.width * r.width;
+  const [, , cw, ch] = cropBox(bmp.width, bmp.height, w, h, im.fx, im.fy, im.zoom);
+  drag = { x: e.clientX, y: e.clientY, fx: im.fx, fy: im.fy,
+           kx: (cw / w) / Math.max(1e-6, bmp.width - cw), ky: (ch / h) / Math.max(1e-6, bmp.height - ch),
+           mx: bmp.width - cw > 0.5, my: bmp.height - ch > 0.5 };
+  viewCanvas.setPointerCapture(e.pointerId); viewCanvas.classList.add("dragging");
+});
+viewCanvas.addEventListener("pointermove", e => {
+  if (!drag) return;
+  const cl = v => Math.min(1, Math.max(0, v));
+  if (drag.mx) changed("fx", +cl(drag.fx - (e.clientX - drag.x) * drag.kx).toFixed(4));
+  if (drag.my) changed("fy", +cl(drag.fy - (e.clientY - drag.y) * drag.ky).toFixed(4));
+});
+const endDrag = () => { drag = null; viewCanvas.classList.remove("dragging"); };
+viewCanvas.addEventListener("pointerup", endDrag);
+viewCanvas.addEventListener("pointercancel", endDrag);
+viewCanvas.addEventListener("wheel", e => {
+  const im = S.sel && img(S.sel); if (!im) return;
+  e.preventDefault();
+  changed("zoom", +Math.min(4, Math.max(1, im.zoom * Math.pow(1.0015, -e.deltaY))).toFixed(3));
+}, { passive: false });
+viewCanvas.addEventListener("dblclick", () => { if (S.sel) { changed("fx", .5); changed("fy", .5); changed("zoom", 1); } });
+
+// ---------------- adding images ----------------
+async function upload(files) {
+  const list = [...files].filter(f => f.type.startsWith("image/") || /\.(png|jpe?g|webp|bmp|tiff?)$/i.test(f.name));
+  if (!list.length) return;
+  let last = null;
+  for (const [i, f] of list.entries()) {
+    setMsg(t("uploading", { i: i + 1, n: list.length, name: f.name }), (i + 1) / list.length);
+    try { last = (await api("upload", { method: "POST", headers: { "X-Filename": encodeURIComponent(f.name) }, body: f })).id; }
+    catch (e) { toast(e.message, true); }
+  }
+  setMsg("", 0);
+  await reload();
+  if (last) select(last);
+}
+$("drop").onclick = () => $("file").click();
+$("file").onchange = e => { upload(e.target.files); e.target.value = ""; };
+let dragDepth = 0;
+window.addEventListener("dragenter", e => { if (e.dataTransfer?.types?.includes("Files")) { dragDepth++; document.body.classList.add("dragging"); } });
+window.addEventListener("dragleave", () => { if (--dragDepth <= 0) { dragDepth = 0; document.body.classList.remove("dragging"); } });
+window.addEventListener("dragover", e => e.preventDefault());
+window.addEventListener("drop", e => { e.preventDefault(); dragDepth = 0; document.body.classList.remove("dragging"); upload(e.dataTransfer.files); });
+
+$("autoBtn").onclick = () => { S.slotCfg = {}; saveSoon(); buildSlots(); renderPool(); renderInspector(); };
+
+// ---------------- language ----------------
+for (const b of document.querySelectorAll(".lang button")) {
+  b.onclick = async () => {
+    if (LANG === b.dataset.lang) return;
+    LANG = b.dataset.lang;
+    applyLang();
+    try { await post("config", configBody()); } catch {}
+    await reload();
+  };
+}
+
+// ---------------- state / header ----------------
+function renderHeader() {
+  const st = S.state;
+  $("pathText").textContent = st.exe;
+  $("version").textContent = st.version ? "Resolve " + st.version : "Resolve —";
+  const pill = $("status");
+  pill.className = "pill";
+  if (st.error) { pill.classList.add("err"); pill.textContent = st.error; }
+  else if (st.state === "patched") { pill.classList.add("ok"); pill.textContent = t("statusPatched") + (st.patchedTime ? " · " + st.patchedTime.slice(0, 16) : ""); }
+  else if (st.state === "partial") { pill.classList.add("warn"); pill.textContent = t("statusPartial"); }
+  else pill.textContent = t("statusOriginal");
+  $("running").hidden = !st.running;
+  $("task").checked = st.task;
+  $("restoreBtn").disabled = S.busy || !st.state || st.state === "original" || !st.backupOk;
+  $("applyBtn").disabled = S.busy || !!st.error || !S.images.length;
+  $("task").disabled = S.busy;
+  if (st.sets?.length) $("sizes").textContent = st.sets.map(s => s.id === "2x" ? "@2x 2220 × 980" : "1110 × 490").join(" · ");
+}
+async function reload() {
+  const st = await api("state");
+  S.state = st;
+  S.images = st.images;
+  S.slotCfg = st.slotCfg || {};
+  S.darken = st.darken !== false;
+  S.box = st.box;
+  if (st.lang && st.lang !== LANG) { LANG = st.lang; }
+  applyLang();
+  if (st.box && !S.tpl) S.tpl = await createImageBitmap(await api("template.png"));
+  if (S.sel && !img(S.sel)) S.sel = null;
+  if (!S.sel && !S.focusSlot && S.images.length) S.sel = S.images[0].id;
+  renderHeader(); renderPool(); buildSlots(); renderInspector();
+  sizeViewCanvas(); renderView();
+}
+$("pathBtn").onclick = async () => {
+  try { S.state = await post("exe", { browse: true }); S.tpl = null; S.origImg = {}; await reload(); }
+  catch (e) { toast(e.message, true); }
+};
+
+// ---------------- jobs ----------------
+function setMsg(text, f) { $("msg").textContent = text || ""; if (f != null) $("prog").style.width = Math.round(f * 100) + "%"; }
+async function runJob(path, body, okText) {
+  S.busy = true; renderHeader();
+  try {
+    await post(path, body);
+    let job;
+    do { await new Promise(r => setTimeout(r, 300)); job = await api("job"); setMsg(job.msg, job.frac ?? null); } while (job.running);
+    if (job.error) { toast(job.error, true); setMsg(job.error, 0); }
+    else { toast(okText(job.result || {})); setMsg(okText(job.result || {}), 1); }
+  } catch (e) { toast(e.message, true); setMsg("", 0); }
+  S.busy = false;
+  S.origImg = {}; await reload();
+}
+$("applyBtn").onclick = async () => {
+  clearTimeout(saveTimer);
+  await post("config", configBody());
+  if (S.state.running && !await confirmBox(t("runningTitle"), t("runningText"), t("continue"))) return;
+  runJob("apply", {}, r => {
+    const mb = Object.values(r.sets || {}).reduce((a, s) => a + s.bytes, 0) / 1e6;
+    return t("applied", { n: r.images, images: imagesWord(r.images), mb: mb.toFixed(1) }) +
+      (r.quantized?.length ? t("quantized", { list: r.quantized.join(", ") }) : "");
+  });
+};
+$("restoreBtn").onclick = async () => {
+  if (!await confirmBox(t("restoreTitle"), t("restoreText"), t("restoreOk"))) return;
+  runJob("restore", {}, () => t("restoredMsg"));
+};
+$("task").onchange = e => {
+  const on = e.target.checked;
+  runJob("task", { on }, () => on ? t("taskOn") : t("taskOff"));
+};
+
+// ---------------- modal / toast ----------------
+function confirmBox(title, text, okLabel) {
+  return new Promise(res => {
+    const s = document.createElement("div"); s.className = "scrim";
+    s.innerHTML = `<div class="modal" role="dialog" aria-modal="true"><h3></h3><p></p><div class="row"><button class="btn ghost" data-v="0"></button><button class="btn primary" data-v="1"></button></div></div>`;
+    s.querySelector("h3").textContent = title; s.querySelector("p").textContent = text;
+    s.querySelector("[data-v='0']").textContent = t("cancel"); s.querySelector("[data-v='1']").textContent = okLabel;
+    const done = v => { s.remove(); res(v); };
+    s.addEventListener("click", e => { if (e.target === s) done(false); const v = e.target.dataset?.v; if (v) done(v === "1"); });
+    s.addEventListener("keydown", e => { if (e.key === "Escape") done(false); });
+    document.body.appendChild(s); s.querySelector("[data-v='1']").focus();
+  });
+}
+function toast(text, err) {
+  const el = document.createElement("div"); el.className = "toast" + (err ? " err" : ""); el.textContent = text;
+  $("toasts").appendChild(el); setTimeout(() => el.remove(), err ? 9000 : 5000);
+}
+
+// ---------------- lifecycle ----------------
+applyLang();
+new ResizeObserver(() => { if (sizeViewCanvas()) renderView(); }).observe($("stage"));
+window.addEventListener("resize", () => { if (sizeViewCanvas()) renderView(); });
+setInterval(() => fetch("api/ping", { method: "POST" }).catch(() => {}), 5000);
+window.addEventListener("pagehide", () => navigator.sendBeacon("api/bye"));
+setInterval(async () => {   // keep "Resolve is running" up to date
+  if (S.busy || !S.state) return;
+  try { const st = await api("state"); S.state.running = st.running; S.state.task = st.task; renderHeader(); } catch {}
+}, 6000);
+reload().catch(e => toast(e.message, true));
+</script>
+</body>
+</html>

@@ -1,0 +1,30 @@
+name: Build macOS app
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-14        # Apple Silicon (arm64), same as M1/M2/M3 Macs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install build tools
+        run: python -m pip install pillow pyinstaller
+      - name: Build the app
+        run: |
+          pyinstaller --noconfirm --windowed --name ResolveSplashPatcher \
+            --osx-bundle-identifier com.resolvesplashpatcher.app \
+            --add-data "ui.html:." splash_patcher.py
+      - name: Smoke test
+        run: dist/ResolveSplashPatcher.app/Contents/MacOS/ResolveSplashPatcher --inspect
+      - name: Zip the app (keeps macOS permissions)
+        run: ditto -c -k --keepParent dist/ResolveSplashPatcher.app ResolveSplashPatcher-mac-app.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ResolveSplashPatcher-mac-app
+          path: ResolveSplashPatcher-mac-app.zip
