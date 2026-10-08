@@ -1235,14 +1235,18 @@ def run_worker(args, progress_file):
     full = [*_self_cmd(), *args, "--progress", progress_file]
     env = {"RSP_APPDIR": APP_DIR, "RSP_UID": str(os.getuid()), "RSP_GID": str(os.getgid())}
     if is_admin():
-        return subprocess.run(full, env={**os.environ, **env}).returncode
+        r = subprocess.run(full, env={**os.environ, **env}, capture_output=True, text=True)
+        return r.returncode, (r.stderr or "").strip()
     cmd = "env " + " ".join(f"{k}={shlex.quote(v)}" for k, v in env.items()) + " " + \
           " ".join(shlex.quote(a) for a in full)
     osa = f'do shell script "{_applescript_quote(cmd)}" with administrator privileges'
     r = subprocess.run(["osascript", "-e", osa], capture_output=True, text=True)
-    if r.returncode != 0 and "-128" in (r.stderr or ""):
-        raise PatchError(tr("uac_denied"))
-    return r.returncode
+    err = (r.stderr or "").strip()
+    if r.returncode != 0:
+        log(f"osascript exit {r.returncode}: {err[-800:]}")
+        if "-128" in err:
+            raise PatchError(tr("uac_denied"))
+    return r.returncode, err
 
 
 def find_chromium_app():
@@ -1333,7 +1337,7 @@ class App:
 
         def worker():
             try:
-                code = run_worker(args, pfile)
+                code, werr = run_worker(args, pfile)
                 data = {}
                 try:
                     with open(pfile, encoding="utf-8") as f:
@@ -1341,7 +1345,7 @@ class App:
                 except (OSError, ValueError):
                     pass
                 if code != 0 and not data.get("error"):
-                    data["error"] = tr("op_failed")
+                    data["error"] = tr("op_failed") + (" · " + werr[-300:] if werr else "")
                 self.job = {"running": False, "kind": kind, "msg": data.get("msg", ""), "frac": 1,
                             "error": data.get("error"), "result": data.get("result")}
             except Exception as e:
