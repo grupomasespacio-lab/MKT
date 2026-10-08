@@ -20,9 +20,9 @@ Adaptación para Mac de [turboenotak/davinci-resolve-splash-patcher](https://git
 Para volver al original, pulsa **Restaurar original**. Si Resolve se actualiza, el splash original regresa: pulsa Aplicar de nuevo.
 La interfaz también tiene un botón **Guía** con estos pasos.
 
-## Si macOS bloquea la escritura
+## Si macOS bloquea la escritura («Operation not permitted»)
 
-En Ajustes del Sistema → Privacidad y seguridad, da a Terminal «Acceso total al disco» o «Administración de apps».
+En Ajustes del Sistema → Privacidad y seguridad, da a **Terminal** el permiso «Administración de apps» (y, si hace falta, «Acceso total al disco»). Cierra Terminal por completo y vuelve a abrir `Abrir.command`.
 
 ## Diferencias con la versión de Windows
 
