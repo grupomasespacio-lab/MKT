@@ -151,6 +151,7 @@ MESSAGES = {
     'busy': ('Another operation is already running', 'Ya hay otra operación en curso'),
     'waiting_admin': ('Waiting for administrator permission…', 'Esperando permiso de administrador…'),
     'op_failed': ('The operation failed (see patcher.log)', 'La operación falló (revisa patcher.log)'),
+    'sudo_expired': ('The administrator session expired. Close this window and open Abrir.command again.', 'La sesión de administrador caducó. Cierra esta ventana y abre Abrir.command de nuevo.'),
     'sign_failed': ('Re-signing the app failed: {err}', 'No se pudo volver a firmar la app: {err}'),
     'pick_exe': ('Choose the Resolve binary', 'Elige el binario de Resolve'),
 }
@@ -1264,6 +1265,18 @@ def run_worker(args, progress_file):
         r = subprocess.run(full, env={**os.environ, **env, "PYINSTALLER_RESET_ENVIRONMENT": "1"},
                            capture_output=True, text=True)
         return r.returncode, (r.stderr or "").strip()
+    if os.environ.get("RSP_SUDO") == "1":
+        # launched by Abrir.command, which already asked for the password in Terminal. Workers
+        # started with sudo from Terminal inherit Terminal's privacy permissions (Full Disk
+        # Access / App Management), which a root process from the password dialog does not.
+        r = subprocess.run(["sudo", "-n", "env", *(f"{k}={v}" for k, v in env.items()),
+                            "PYINSTALLER_RESET_ENVIRONMENT=1", *full], capture_output=True, text=True)
+        err = (r.stderr or "").strip()
+        if r.returncode != 0:
+            log(f"sudo exit {r.returncode}: {err[-800:]}")
+            if "password is required" in err or "a terminal is required" in err:
+                raise PatchError(tr("sudo_expired"))
+        return r.returncode, err
     cmd = "env " + " ".join(f"{k}={shlex.quote(v)}" for k, v in env.items()) + " " + \
           " ".join(shlex.quote(a) for a in full)
     osa = f'do shell script "{_applescript_quote(cmd)}" with administrator privileges'
