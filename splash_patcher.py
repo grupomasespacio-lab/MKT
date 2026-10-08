@@ -213,6 +213,8 @@ class Layout:
     node_size: int
     node_count: int
     files: list = field(default_factory=list)
+    data_end: int = 0
+    anchor_pos: int = 0
 
     def entry_start(self, node):
         return self.data + node.data_off
@@ -282,13 +284,20 @@ def _walk_tree(buf, tree, node_size, limit=100000):
     return out
 
 
-def _validate_data(buf, data, names, by_off):
+ROOT_RE = re.compile(rb"\x00\x00\x00\x00\x00\x02[\x00-\xff]{4}\x00\x00\x00\x01")
+WIDE = 32 * 1024 * 1024      # how far from the names table the tree may live
+PNG_IEND = b"IEND\xaeB`\x82"
+
+
+def _validate_data(buf, data, by_off):
+    """True if `data` is the base of a data table in which every entry fits before the next."""
+    total = len(buf)
     for i, n in enumerate(by_off):
         start = data + n.data_off
-        if start + 8 > names:
+        if start < 0 or start + 8 > total:
             return False
         size = struct.unpack(">I", buf[start:start + 4])[0]
-        limit = data + by_off[i + 1].data_off if i + 1 < len(by_off) else names
+        limit = data + by_off[i + 1].data_off if i + 1 < len(by_off) else total
         if start + 4 + size > limit:
             return False
         head = bytes(buf[start + 4:start + 12])
@@ -301,25 +310,65 @@ def _validate_data(buf, data, names, by_off):
     return True
 
 
-def _find_data_table(buf, names, files):
-    """The last image signature before the names table belongs to some entry k, so
-    data = pos - 4 - k.data_off; the candidate is validated against the whole table."""
-    lo = max(0, names - 256 * 1024 * 1024)
+def _find_data_table(buf, names, files, anchor, trace=None):
+    """The data table may sit before or after the names table (the linker decides). The anchor
+    entry is a PNG, so every PNG nearby gives a candidate data = pos - 4 - anchor.data_off.
+    The NEAREST candidate that validates against the whole table wins: in a universal binary
+    every architecture slice carries an identical copy of the resources."""
     by_off = sorted({n.data_off: n for n in files}.values(), key=lambda n: n.data_off)
-    for sig in (PNG_SIG, b"\xff\xd8\xff"):
-        p = buf.rfind(sig, lo, names)
+    lo, hi = max(0, names - 384 * 1024 * 1024), min(len(buf), names + 384 * 1024 * 1024)
+    cands, pos, seen = [], lo, 0
+    while True:
+        p = buf.find(PNG_SIG, pos, hi)
         if p < 0:
+            break
+        pos = p + 1
+        seen += 1
+        data = p - 4 - anchor.data_off
+        if data < 0 or p < 4:
             continue
-        for cand in sorted(files, key=lambda n: -n.data_off):
-            data = p - 4 - cand.data_off
-            if data >= 0 and _validate_data(buf, data, names, by_off):
-                return data
+        size = struct.unpack(">I", buf[p - 4:p])[0]
+        if p + size > len(buf) or bytes(buf[p + size - 8:p + size]) != PNG_IEND:
+            continue
+        cands.append((abs(data - names), data))
+    cands.sort()
+    if trace is not None:
+        trace.append(f"  data search: {seen} PNG signatures near names, {len(cands)} plausible "
+                     f"(anchor flags={anchor.flags}, data_off={anchor.data_off})")
+    for _, data in cands[:50]:
+        if _validate_data(buf, data, by_off):
+            return data
     raise PatchError(tr("no_data_table"))
 
 
-def locate(buf, group, anchor_name, start=0):
+def _children_sorted(buf, tree, node_size, by_index):
+    """rcc sorts the children of every directory by name hash; a mis-parsed tree never does."""
+    for idx, (pos, flags, name) in by_index.items():
+        if not flags & 2:
+            continue
+        count, first = struct.unpack(">II", buf[pos + 6:pos + 14])
+        hashes = []
+        for c in range(first, first + count):
+            if c not in by_index:
+                return False
+            hashes.append(qt_hash(by_index[c][2]))
+        if hashes != sorted(hashes):
+            return False
+    return True
+
+
+def _data_limit(buf, lay):
+    """Where the data table ends: before the next table, and never absurdly far past the
+    last entry. A patch marker lives in free space that may lie beyond the last live entry."""
+    last = max(lay.entry_start(n) + lay.entry_size(buf, n) for n in lay.files)
+    bound = min([t for t in (lay.names, lay.tree) if t > lay.data] + [len(buf)])
+    return min(bound, last + 128 * 1024 * 1024, len(buf))
+
+
+def locate(buf, group, anchor_name, start=0, trace=None):
     """Locate the Qt resource containing `anchor_name` (searching from `start`). Works on
-    original and on previously patched executables (name and tree tables never move)."""
+    original and on previously patched executables (name and tree tables never move).
+    The three tables (data, names, tree) may come in any order."""
     anchor = anchor_name.encode("utf-16-be")
     search = start
     while True:
@@ -338,12 +387,14 @@ def locate(buf, group, anchor_name, start=0):
                 break
             q += r[1]
         names_end = q
-        for node_size in (22, 14):
-            for tree in range(names_end, names_end + 512):
-                if struct.unpack(">IH", buf[tree:tree + 6]) != (0, 2):
-                    continue
-                if struct.unpack(">I", buf[tree + 10:tree + 14])[0] != 1:
-                    continue
+        lo, hi = max(0, entry - WIDE), min(len(buf), names_end + WIDE)
+        trees = sorted((m.start() for m in ROOT_RE.finditer(buf, lo, hi)),
+                       key=lambda t: abs(t - names_end))
+        if trace is not None:
+            trace.append(f"anchor {anchor_name} @ {entry}: names run to {names_end}; "
+                         f"{len(trees)} tree-root candidates within {WIDE >> 20} MB")
+        for tree in trees:
+            for node_size in (22, 14):
                 try:
                     nodes = _walk_tree(buf, tree, node_size)
                 except (ValueError, struct.error):
@@ -363,27 +414,44 @@ def locate(buf, group, anchor_name, start=0):
                         named.append(Node(i, pos, r[0], flags, data_off))
                     if not ok or not any(n.name == anchor_name for n in named):
                         continue
+                    by_index = {n.index: (n.pos, n.flags, n.name) for n in named}
+                    by_index[0] = (tree, 2, "")
+                    if not _children_sorted(buf, tree, node_size, by_index):
+                        continue
                     files = [n for n in named if n.data_off is not None]
-                    data = _find_data_table(buf, names, files)
-                    return Layout(group=group, tree=tree, names=names, data=data,
-                                  node_size=node_size, node_count=max(n[0] for n in nodes) + 1,
-                                  files=files)
+                    anchor_node = next(n for n in files if n.name == anchor_name)
+                    if trace is not None:
+                        trace.append(f" tree @ {tree} node_size={node_size}: {len(nodes)} nodes, "
+                                     f"{len(files)} files, names @ {names}")
+                    if anchor_node.flags & 5:
+                        if trace is not None:
+                            trace.append(f"  splash entry is compressed (flags={anchor_node.flags}): unsupported")
+                        break
+                    try:
+                        data = _find_data_table(buf, names, files, anchor_node, trace)
+                    except PatchError:
+                        break
+                    lay = Layout(group=group, tree=tree, names=names, data=data,
+                                 node_size=node_size, node_count=max(n[0] for n in nodes) + 1,
+                                 files=files, anchor_pos=entry)
+                    lay.data_end = _data_limit(buf, lay)
+                    return lay
 
 
-def locate_all(buf):
+def locate_all(buf, trace=None):
     """{group id: Layout}. A universal Mach-O contains one copy of each set per architecture;
     extra copies get ids like "1x#2"."""
     out = {}
     for gid, anchor in GROUPS:
         start, n = 0, 0
         while True:
-            lay = locate(buf, gid if n == 0 else f"{gid}#{n + 1}", anchor, start)
+            lay = locate(buf, gid if n == 0 else f"{gid}#{n + 1}", anchor, start, trace)
             if not lay:
                 break
             if lay.win_slots():
                 out[lay.group] = lay
                 n += 1
-            start = lay.tree_range()[1]
+            start = lay.anchor_pos + 12
             if n >= 4:
                 break
     if not out:
@@ -504,7 +572,7 @@ def resign(exe_path):
 
 
 def find_marker(buf, layout):
-    p = buf.find(MARKER, layout.data, layout.names)
+    p = buf.find(MARKER, layout.data, layout.data_end)
     if p < 0:
         return None
     length = struct.unpack(">I", buf[p + 8:p + 12])[0]
@@ -1078,6 +1146,45 @@ def cli(argv):
         chown_app_dir()
 
 
+def _deep_report(mm):
+    """Low-level facts about where the tables are, to adapt the locator if it fails."""
+    out = []
+    for gid, anchor_name in GROUPS:
+        anchor = anchor_name.encode("utf-16-be")
+        p = mm.find(anchor)
+        while p >= 0 and not (read_name_entry(mm, p - 6) or ("",))[0] == anchor_name:
+            p = mm.find(anchor, p + 1)
+        if p < 0:
+            out.append(f"[{gid}] anchor name not found as a valid Qt name entry")
+            continue
+        entry, q = p - 6, p - 6
+        while True:
+            r = read_name_entry(mm, q)
+            if not r:
+                break
+            q += r[1]
+        out.append(f"[{gid}] anchor entry @{entry}, names end @{q}")
+        out.append(f"[{gid}] bytes after names: {bytes(mm[q:q + 40]).hex()}")
+        roots = [m.start() - q for m in ROOT_RE.finditer(mm, max(0, q - WIDE), min(len(mm), q + WIDE))]
+        out.append(f"[{gid}] root-node candidates (offset from names end, +-{WIDE >> 20}MB): {roots[:12]}")
+        for off in roots[:12]:
+            t = q + off
+            for ns in (22, 14):
+                try:
+                    nodes = _walk_tree(mm, t, ns)
+                    named = sum(1 for nd in nodes if nd[4] is not None)
+                    out.append(f"[{gid}]   tree@{off:+d} node_size={ns}: {len(nodes)} nodes, {named} files")
+                except Exception as e:
+                    out.append(f"[{gid}]   tree@{off:+d} node_size={ns}: walk failed ({type(e).__name__})")
+        lo, hi = max(0, q - 4 * 1024 * 1024), min(len(mm), q + 4 * 1024 * 1024)
+        sigs = {"png": len(re.findall(re.escape(PNG_SIG), mm[lo:hi])),
+                "zstd": mm[lo:hi].count(b"\x28\xb5\x2f\xfd"), "zlib78": mm[lo:hi].count(b"\x00\x00\x78\x9c")}
+        out.append(f"[{gid}] signatures within +-4MB of names: {sigs}")
+        r = read_name_entry(mm, entry - 38)
+        out.append(f"[{gid}] bytes before anchor entry: {bytes(mm[entry - 24:entry]).hex()}")
+    return out
+
+
 def inspect_report(exe):
     """Diagnostics: what does the binary contain? (useful if the format differs on macOS)"""
     out = [f"exe: {exe}", f"exists: {os.path.isfile(exe)}", f"bundle: {app_bundle(exe)}",
@@ -1087,8 +1194,9 @@ def inspect_report(exe):
     out.append(f"size: {os.path.getsize(exe)}")
     with open(exe, "rb") as f, mmap.mmap(f.fileno(), 0, access=mmap.ACCESS_READ) as mm:
         out.append(f"magic: {bytes(mm[:4]).hex()}  (cafebabe/bebafeca = universal)")
+        trace = []
         try:
-            for g, lay in locate_all(mm).items():
+            for g, lay in locate_all(mm, trace).items():
                 w = lay.win_slots()
                 first = Image.open(io.BytesIO(lay.read(mm, next(iter(w.values())))))
                 out.append(f"set {g}: {len(w)} slots, {len(lay.linux_slots())} linux slots, "
@@ -1096,6 +1204,8 @@ def inspect_report(exe):
                            f"marker={find_marker(mm, lay) is not None}")
         except PatchError as e:
             out.append(f"locate failed: {e}")
+            out.extend(trace[:60])
+            out.extend(_deep_report(mm))
         names, pos = set(), 0
         needle = "Splash".encode("utf-16-be")
         while len(names) < 60:
