@@ -1027,9 +1027,31 @@ def _python(windowless=True):
     return sys.executable
 
 
+DAEMON_BIN = f"/Library/Application Support/{APP_NAME}/{APP_NAME}"
+
+
+def worker_executable():
+    """macOS does not let a root process launched from the password prompt read programs that
+    live in protected folders such as Downloads ("Could not load PyInstaller's embedded PKG
+    archive"). So the elevated worker runs from a copy kept in Application Support."""
+    src = sys.executable
+    dst = os.path.join(APP_DIR, "bin", APP_NAME)
+    try:
+        os.makedirs(os.path.dirname(dst), exist_ok=True)
+        if (not os.path.isfile(dst) or os.path.getsize(dst) != os.path.getsize(src)
+                or os.path.getmtime(dst) < os.path.getmtime(src)):
+            shutil.copyfile(src, dst + ".tmp")
+            os.chmod(dst + ".tmp", 0o755)
+            os.replace(dst + ".tmp", dst)
+        return dst
+    except OSError as e:
+        log(f"could not copy the program for the elevated worker: {e}")
+        return src
+
+
 def _self_cmd():
-    """Command that runs this program again (as the elevated worker or the launch daemon)."""
-    return [sys.executable] if FROZEN else [sys.executable, os.path.abspath(__file__)]
+    """Command that runs this program again (as the elevated worker)."""
+    return [worker_executable()] if FROZEN else [sys.executable, os.path.abspath(__file__)]
 
 
 def task_installed():
@@ -1045,7 +1067,7 @@ def _plist_for(exe):
         watch.append(os.path.join(b, "Contents", "Info.plist"))
     return plistlib.dumps({
         "Label": TASK_NAME,
-        "ProgramArguments": [*_self_cmd(), "--auto"],
+        "ProgramArguments": [DAEMON_BIN, "--auto"] if FROZEN else [sys.executable, os.path.abspath(__file__), "--auto"],
         "RunAtLoad": True,
         "WatchPaths": watch,
         "ThrottleInterval": 60,
@@ -1057,6 +1079,10 @@ def _plist_for(exe):
 def install_task():
     """Root launch daemon: re-applies the saved splash screens after Resolve updates."""
     cfg = load_config()
+    if FROZEN:      # the daemon must not depend on a file in Downloads
+        os.makedirs(os.path.dirname(DAEMON_BIN), exist_ok=True)
+        shutil.copyfile(sys.executable, DAEMON_BIN)
+        os.chmod(DAEMON_BIN, 0o755)
     with open(DAEMON_PLIST, "wb") as f:
         f.write(_plist_for(cfg["exe"]))
     os.chmod(DAEMON_PLIST, 0o644)
@@ -1235,7 +1261,8 @@ def run_worker(args, progress_file):
     full = [*_self_cmd(), *args, "--progress", progress_file]
     env = {"RSP_APPDIR": APP_DIR, "RSP_UID": str(os.getuid()), "RSP_GID": str(os.getgid())}
     if is_admin():
-        r = subprocess.run(full, env={**os.environ, **env}, capture_output=True, text=True)
+        r = subprocess.run(full, env={**os.environ, **env, "PYINSTALLER_RESET_ENVIRONMENT": "1"},
+                           capture_output=True, text=True)
         return r.returncode, (r.stderr or "").strip()
     cmd = "env " + " ".join(f"{k}={shlex.quote(v)}" for k, v in env.items()) + " " + \
           " ".join(shlex.quote(a) for a in full)
