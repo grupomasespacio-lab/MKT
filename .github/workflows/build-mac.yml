@@ -15,15 +15,18 @@ jobs:
           python-version: "3.12"
       - name: Install build tools
         run: python -m pip install pillow pyinstaller
-      - name: Build the app
+      - name: Build the program (single file, runs in Terminal)
         run: |
-          pyinstaller --noconfirm --windowed --name ResolveSplashPatcher \
-            --osx-bundle-identifier com.resolvesplashpatcher.app \
+          pyinstaller --noconfirm --onefile --console --name ResolveSplashPatcher \
             --add-data "ui.html:." splash_patcher.py
       - name: Smoke test
-        run: dist/ResolveSplashPatcher.app/Contents/MacOS/ResolveSplashPatcher --inspect
-      - name: Zip the app (keeps macOS permissions)
-        run: ditto -c -k --keepParent dist/ResolveSplashPatcher.app ResolveSplashPatcher-mac-app.zip
+        run: dist/ResolveSplashPatcher --inspect
+      - name: Package
+        run: |
+          mkdir ResolveSplashPatcher-mac
+          cp dist/ResolveSplashPatcher Abrir.command ResolveSplashPatcher-mac/
+          chmod +x ResolveSplashPatcher-mac/*
+          ditto -c -k --keepParent ResolveSplashPatcher-mac ResolveSplashPatcher-mac-app.zip
       - uses: actions/upload-artifact@v4
         with:
           name: ResolveSplashPatcher-mac-app

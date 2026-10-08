@@ -1443,19 +1443,29 @@ def run_server(open_window=True):
 
     threading.Thread(target=watchdog, daemon=True).start()
     if open_window:
-        browser = find_chromium_app()
-        if browser:      # app-style window without browser chrome
-            subprocess.Popen(["open", "-na", browser, "--args", f"--app={url}", "--window-size=1500,980",
-                              f"--user-data-dir={os.path.join(APP_DIR, 'window')}",
-                              "--no-first-run", "--no-default-browser-check"])
-        else:
-            import webbrowser
-            webbrowser.open(url)
+        print(f"\nInterface: {url}\n(Leave this window open while you use the program.)", flush=True)
+        try:
+            subprocess.Popen(["open", url])          # default browser
+        except Exception as e:
+            log(f"could not open the browser: {e}")
     srv.serve_forever()
 
 
 def main():
+    try:
+        _main()
+    except SystemExit:
+        raise
+    except BaseException:
+        err = traceback.format_exc()
+        log("FATAL: " + err)
+        print(err, flush=True)
+        sys.exit(1)
+
+
+def _main():
     argv = sys.argv[1:]
+    log(f"start argv={argv} frozen={FROZEN} python={sys.version.split()[0]} appdir={APP_DIR}")
     if any(a in argv for a in ("--apply", "--auto", "--restore", "--task-on", "--task-off", "--inspect")):
         sys.exit(cli(argv))
     run_server(open_window="--no-window" not in argv)
