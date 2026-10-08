@@ -1292,8 +1292,9 @@ def run_server(open_window=True):
     dialog_lock = threading.Lock()
 
     class H(BaseHTTPRequestHandler):
-        def log_message(self, *a):
-            pass
+        def log_message(self, fmt, *a):
+            if a and str(a[-1]).startswith(("4", "5")):
+                log("HTTP " + (fmt % a))
 
         def send(self, code, body=b"", ctype="application/json", cache=False):
             if isinstance(body, (dict, list)):
@@ -1436,10 +1437,9 @@ def run_server(open_window=True):
             time.sleep(2)
             if app.job.get("running"):
                 continue
-            idle = time.time() - app.last_ping
-            if (app.bye_at and time.time() - app.bye_at > 6) or idle > 180:
-                srv.shutdown()
-                return
+            # console build: the server stays up until the Terminal window is closed (Ctrl+C);
+            # browsers throttle background tabs, so idle time says nothing here
+            continue
 
     threading.Thread(target=watchdog, daemon=True).start()
     if open_window:
