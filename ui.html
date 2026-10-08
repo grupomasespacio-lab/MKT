@@ -232,6 +232,10 @@ input[type=range]:disabled { opacity: .35; }
 .modal h3 { margin: 0; font-size: 15px; }
 .modal p { margin: 0; color: var(--muted); }
 .modal .row { justify-content: flex-end; }
+.scrim[hidden] { display: none; }
+.modal.guide { width: min(560px, calc(100% - 32px)); max-height: calc(100vh - 48px); overflow: auto; }
+.modal.guide ol { margin: 0; padding-left: 20px; display: grid; gap: 8px; }
+.modal.guide li { color: var(--text); }
 .toasts { position: fixed; right: 16px; bottom: 70px; display: grid; gap: 8px; z-index: 11; }
 .toast { background: var(--raised); border: 1px solid var(--line-strong); border-left: 3px solid var(--ok); border-radius: var(--r-sm); padding: 10px 14px; max-width: 420px; box-shadow: 0 8px 24px rgba(0,0,0,.35); }
 .toast.err { border-left-color: var(--err); }
@@ -263,8 +267,9 @@ input[type=range]:disabled { opacity: .35; }
     <span class="pill warn" id="running" hidden data-i18n="running"></span>
     <span class="spacer"></span>
     <button class="path" id="pathBtn" data-i18n-title="pathTitle"><span id="pathText"></span><b data-i18n="change"></b></button>
+    <button class="btn ghost" id="guideBtn" data-i18n="guide"></button>
     <div class="lang" role="group" aria-label="Language">
-      <button id="langEn" data-lang="en" aria-pressed="true">EN</button><button id="langRu" data-lang="ru" aria-pressed="false">RU</button>
+      <button id="langEs" data-lang="es" aria-pressed="true">ES</button><button id="langEn" data-lang="en" aria-pressed="false">EN</button>
     </div>
   </header>
 
@@ -322,6 +327,14 @@ input[type=range]:disabled { opacity: .35; }
     <button class="btn primary" id="applyBtn" data-i18n="apply"></button>
   </footer>
 </div>
+<div class="scrim" id="guideScrim" hidden>
+  <div class="modal guide" role="dialog" aria-modal="true" aria-labelledby="guideTitle">
+    <h3 id="guideTitle" data-i18n="guideTitle"></h3>
+    <ol id="guideList"></ol>
+    <p id="guideNote"></p>
+    <div class="row"><button class="btn primary" id="guideClose" data-i18n="close"></button></div>
+  </div>
+</div>
 <div class="toasts" id="toasts"></div>
 
 <script>
@@ -353,55 +366,77 @@ const I18N = {
     restoreText: "Resolve will be restored from the backup. Your images and settings stay here.", restoreOk: "Restore",
     restoredMsg: "Original splash screens restored",
     taskOn: "Auto re-apply is on: your splash screens come back after Resolve updates", taskOff: "Auto re-apply is off",
+    guide: "Guide", guideTitle: "How to change the DaVinci Resolve splash",
+    g1: "Close DaVinci Resolve completely.",
+    g2: "Click “Add images” (or drop files) and pick your photos or logos. Any size works.",
+    g3: "Select an image and frame it: drag to move, scroll to zoom. The preview is the final result.",
+    g4: "Keep “Darken left side” on so Resolve's title and loading text stay readable.",
+    g5: "Under “Splash slots”, Resolve uses a different one at each launch. By default your images rotate across all of them; you can assign a specific image to a slot or keep the original.",
+    g6: "Click “Apply” and enter your Mac password. Wait for “Done”.",
+    g7: "Open DaVinci Resolve and you will see your image at startup.",
+    gNote: "When Resolve updates, the original splash comes back: click Apply again. To undo everything, click “Restore original”.",
+    close: "Close",
   },
-  ru: {
-    reading: "Чтение Resolve…", running: "Resolve запущен", pathTitle: "Выбрать другой Resolve", change: "Изменить",
-    images: "Изображения", addImages: "Добавить изображения", orDrop: "или перетащите файлы сюда",
-    preview: "Предпросмотр", emptyTitle: "Добавьте первое изображение", emptyText: "Подойдёт картинка любого размера: она будет обрезана под формат заставки.",
-    hint: "Перетаскивайте картинку мышью, колесо меняет масштаб, двойной клик сбрасывает кадр.",
-    framing: "Кадр", horizontal: "По горизонтали", vertical: "По вертикали", zoom: "Масштаб",
-    resetFraming: "Сбросить кадр", remove: "Удалить", usedIn: "Используется в слотах",
-    usedNone: "Ни в одном. Выберите картинку в списке слота.", slotKept: "Слот оставлен оригинальным.", pickLeft: "Выберите изображение слева.",
-    darken: "Затемнять слева (все изображения)",
-    darkenNote: "Добавляет такую же тёмную панель, как у стандартных заставок: название и текст загрузки Resolve остаются читаемыми.",
-    slotsTitle: "Слоты заставки", slotsLegend: "Resolve сам выбирает слот при каждом запуске. Слева оригинал, справа замена.",
-    allAuto: "Все слоты: по кругу", autoOpt: "Авто (по кругу)", originalOpt: "Оригинал",
-    capOriginal: "оригинал", capUnchanged: "без изменений", slot: "Слот", slotOriginal: "оригинал",
-    autopatch: "Автопатч после обновлений", autopatchTitle: "Задача Планировщика заново применяет заставки после обновления Resolve",
-    restore: "Восстановить оригинал", apply: "Применить",
-    statusPatched: "Заставки заменены", statusPartial: "Заменены не все наборы, нажмите «Применить»", statusOriginal: "Оригинальные заставки",
-    notAssigned: "не назначено", uploading: "Загрузка {i} из {n}: {name}",
-    deleteTitle: "Удалить изображение?", deleteText: "«{name}» будет убрано из списка. Слоты с ним перейдут в режим «Авто».",
-    cancel: "Отмена", runningTitle: "Resolve запущен",
-    runningText: "Закройте DaVinci Resolve, иначе файл нельзя изменить. Всё равно продолжить?", continue: "Продолжить",
-    applied: "Готово: {n} {images} записано в оба набора ({mb} МБ). Запустите Resolve.", quantized: " Сжаты палитрой: {list}.",
-    restoreTitle: "Вернуть оригинальные заставки?",
-    restoreText: "Resolve будет восстановлен из резервной копии. Ваши изображения и настройки останутся здесь.", restoreOk: "Восстановить",
-    restoredMsg: "Оригинальные заставки восстановлены",
-    taskOn: "Автопатч включён: заставки вернутся после обновления Resolve", taskOff: "Автопатч выключен",
+  es: {
+    reading: "Leyendo Resolve…", running: "Resolve está abierto", pathTitle: "Elegir otro Resolve", change: "Cambiar",
+    images: "Imágenes", addImages: "Agregar imágenes", orDrop: "o arrastra los archivos aquí",
+    preview: "Vista previa", emptyTitle: "Agrega tu primera imagen", emptyText: "Sirve cualquier tamaño: se recorta al formato del splash.",
+    hint: "Arrastra la imagen para moverla, usa la rueda para acercar y doble clic para reiniciar el encuadre.",
+    framing: "Encuadre", horizontal: "Horizontal", vertical: "Vertical", zoom: "Zoom",
+    resetFraming: "Reiniciar encuadre", remove: "Quitar", usedIn: "Usada en los espacios",
+    usedNone: "Aún ninguno. Elige esta imagen en la lista de un espacio.", slotKept: "Este espacio conserva el original.", pickLeft: "Elige una imagen a la izquierda.",
+    darken: "Oscurecer el lado izquierdo (todas las imágenes)",
+    darkenNote: "Agrega el mismo panel oscuro del splash original para que el título y el texto de carga de Resolve se lean bien.",
+    slotsTitle: "Espacios del splash", slotsLegend: "Resolve elige uno distinto en cada inicio. Original a la izquierda, reemplazo a la derecha.",
+    allAuto: "Todos: en rotación", autoOpt: "Auto (rotar)", originalOpt: "Original",
+    capOriginal: "original", capUnchanged: "sin cambios", slot: "Espacio", slotOriginal: "original",
+    autopatch: "Reaplicar tras actualizar Resolve", autopatchTitle: "Una tarea automática vuelve a aplicar tu splash después de actualizar Resolve",
+    restore: "Restaurar original", apply: "Aplicar",
+    statusPatched: "Splash reemplazado", statusPartial: "No todos los conjuntos están reemplazados, pulsa Aplicar", statusOriginal: "Splash original",
+    notAssigned: "sin asignar", uploading: "Subiendo {i} de {n}: {name}",
+    deleteTitle: "¿Quitar esta imagen?", deleteText: "«{name}» se quitará de la lista. Los espacios que la usan pasan a Auto.",
+    cancel: "Cancelar", runningTitle: "Resolve está abierto",
+    runningText: "Cierra DaVinci Resolve primero; si no, no se puede modificar el archivo. ¿Continuar de todos modos?", continue: "Continuar",
+    applied: "Listo: {n} {images} escritas en ambos conjuntos ({mb} MB). Abre Resolve.", quantized: " Reducidas a 256 colores: {list}.",
+    restoreTitle: "¿Restaurar el splash original?",
+    restoreText: "Se restaurará Resolve desde el respaldo. Tus imágenes y ajustes se conservan aquí.", restoreOk: "Restaurar",
+    restoredMsg: "Splash original restaurado",
+    taskOn: "Reaplicación automática activada: tu splash volverá tras actualizar Resolve", taskOff: "Reaplicación automática desactivada",
+    guide: "Guía", guideTitle: "Cómo cambiar el splash de DaVinci Resolve",
+    g1: "Cierra DaVinci Resolve por completo.",
+    g2: "Pulsa «Agregar imágenes» (o arrástralas) y elige tus fotos o logos. Sirve cualquier tamaño.",
+    g3: "Selecciona una imagen y acomódala: arrástrala para moverla y usa la rueda para acercar. La vista previa es el resultado final.",
+    g4: "Deja activado «Oscurecer el lado izquierdo» si quieres que el título y el texto de carga de Resolve se lean bien.",
+    g5: "En «Espacios del splash» Resolve usa uno distinto en cada inicio. Por defecto tus imágenes se reparten en todos; puedes asignar una imagen concreta a cada uno o dejar el original.",
+    g6: "Pulsa «Aplicar» e ingresa tu contraseña de Mac. Espera el mensaje «Listo».",
+    g7: "Abre DaVinci Resolve y verás tu imagen al iniciar.",
+    gNote: "Si Resolve se actualiza, vuelve el splash original: pulsa Aplicar otra vez. Para deshacer todo, pulsa «Restaurar original».",
+    close: "Cerrar",
   },
 };
-let LANG = "en";
+let LANG = "es";
 function t(key, vars = {}) {
   const s = (I18N[LANG] && I18N[LANG][key]) ?? I18N.en[key] ?? key;
   return s.replace(/\{(\w+)\}/g, (_, k) => vars[k] ?? "");
 }
-// count phrases: "in 3 slots" / "в 3 слотах", "2 images" / "2 изображения"
+// count phrases: "in 3 slots" / "en 3 espacios"
 function inSlots(n) {
-  if (LANG === "ru") return `в ${n} ${ruPlural(n, "слоте", "слотах", "слотах")}`;
+  if (LANG === "es") return `en ${n} ${n === 1 ? "espacio" : "espacios"}`;
   return `in ${n} ${n === 1 ? "slot" : "slots"}`;
 }
 function imagesWord(n) {
-  return LANG === "ru" ? ruPlural(n, "изображение", "изображения", "изображений") : (n === 1 ? "image" : "images");
+  return LANG === "es" ? (n === 1 ? "imagen" : "imágenes") : (n === 1 ? "image" : "images");
 }
-const ruPlural = (n, a, b, c) => (n % 10 === 1 && n % 100 !== 11) ? a : (n % 10 >= 2 && n % 10 <= 4 && (n % 100 < 10 || n % 100 >= 20)) ? b : c;
 
 function applyLang() {
   document.documentElement.lang = LANG;
+  $("guideList").innerHTML = "";
+  for (let i = 1; i <= 7; i++) { const li = document.createElement("li"); li.textContent = t("g" + i); $("guideList").append(li); }
+  $("guideNote").textContent = t("gNote");
   document.querySelectorAll("[data-i18n]").forEach(el => { el.textContent = t(el.dataset.i18n); });
   document.querySelectorAll("[data-i18n-title]").forEach(el => { el.title = t(el.dataset.i18nTitle); });
   $("langEn").setAttribute("aria-pressed", LANG === "en");
-  $("langRu").setAttribute("aria-pressed", LANG === "ru");
+  $("langEs").setAttribute("aria-pressed", LANG === "es");
 }
 
 // ---------------- state ----------------
@@ -728,6 +763,12 @@ window.addEventListener("drop", e => { e.preventDefault(); dragDepth = 0; docume
 
 $("autoBtn").onclick = () => { S.slotCfg = {}; saveSoon(); buildSlots(); renderPool(); renderInspector(); };
 
+// ---------------- guide ----------------
+$("guideBtn").onclick = () => { $("guideScrim").hidden = false; };
+$("guideClose").onclick = () => { $("guideScrim").hidden = true; };
+$("guideScrim").addEventListener("click", e => { if (e.target === $("guideScrim")) $("guideScrim").hidden = true; });
+window.addEventListener("keydown", e => { if (e.key === "Escape") $("guideScrim").hidden = true; });
+
 // ---------------- language ----------------
 for (const b of document.querySelectorAll(".lang button")) {
   b.onclick = async () => {
@@ -755,7 +796,7 @@ function renderHeader() {
   $("restoreBtn").disabled = S.busy || !st.state || st.state === "original" || !st.backupOk;
   $("applyBtn").disabled = S.busy || !!st.error || !S.images.length;
   $("task").disabled = S.busy;
-  if (st.sets?.length) $("sizes").textContent = st.sets.map(s => s.id === "2x" ? "@2x 2220 × 980" : "1110 × 490").join(" · ");
+  if (st.sets?.length) $("sizes").textContent = [...new Set(st.sets.map(s => s.id.startsWith("2x") ? "@2x 2220 × 980" : "1110 × 490"))].join(" · ");
 }
 async function reload() {
   const st = await api("state");

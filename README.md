@@ -1,74 +1,46 @@
-# Resolve Splash Patcher (macOS port)
+# Resolve Splash Patcher (versión para macOS)
 
-Replace the DaVinci Resolve splash screens with your own images. Port of
-[turboenotak/davinci-resolve-splash-patcher](https://github.com/turboenotak/davinci-resolve-splash-patcher)
-(MIT) from Windows to macOS.
+Cambia la pantalla de inicio (splash) de DaVinci Resolve por tus propias imágenes.
+Adaptación para Mac de [turboenotak/davinci-resolve-splash-patcher](https://github.com/turboenotak/davinci-resolve-splash-patcher) (licencia MIT).
 
-> Unofficial tool, not affiliated with Blackmagic Design. It modifies the Resolve executable
-> inside `/Applications`; use it at your own risk. **This port has been tested only on a synthetic
-> binary, not on a real Resolve for Mac** — see "First run" below.
+> Herramienta no oficial, sin relación con Blackmagic Design. Modifica el ejecutable de Resolve dentro de
+> `/Applications`; úsala bajo tu responsabilidad. Se probó con un binario sintético, no con un Resolve real de Mac.
 
-## Install and run
+## Cómo cambiar el splash (resumen)
 
-1. Python 3.10+ (`python3 --version`; if missing: `xcode-select --install` or python.org).
-2. Unzip, then double-click **`Start.command`** (first time: right-click → Open, because macOS
-   quarantines downloaded scripts). It installs Pillow the first time.
-3. The interface opens in your browser (as an app-style window if Chrome/Edge/Brave is installed).
-4. Add images, frame them, **close DaVinci Resolve**, click **Apply**. macOS asks for your
-   administrator password because the app lives in `/Applications`.
+1. Cierra DaVinci Resolve por completo.
+2. Abre `Abrir.command` (doble clic; la primera vez, clic derecho → Abrir). Se abre la interfaz en tu navegador.
+   Deja abierta la ventana de Terminal mientras la uses.
+3. Pulsa **Agregar imágenes** y elige tus fotos o logos. Sirve cualquier tamaño.
+4. Acomoda cada imagen: arrástrala para moverla y usa la rueda para acercar.
+5. Deja activado **Oscurecer el lado izquierdo** para que el texto de Resolve se lea bien.
+6. Pulsa **Aplicar** e ingresa tu contraseña de Mac. Espera el mensaje **Listo**.
+7. Abre DaVinci Resolve: verás tu imagen al iniciar.
 
-## First run (important)
+Para volver al original, pulsa **Restaurar original**. Si Resolve se actualiza, el splash original regresa: pulsa Aplicar de nuevo.
+La interfaz también tiene un botón **Guía** con estos pasos.
 
-Before the first Apply, open Terminal in this folder and run:
+## Si macOS bloquea la escritura
 
-```bash
-python3 splash_patcher.py --inspect
-```
+En Ajustes del Sistema → Privacidad y seguridad, da a Terminal «Acceso total al disco» o «Administración de apps».
 
-It prints what it finds in your Resolve binary (sets, image sizes, universal binary or not).
-If it says `locate failed`, the Mac build stores the splash differently and the tool cannot patch
-it yet; send me that output and the port can be adjusted.
+## Diferencias con la versión de Windows
 
-## What changed vs. the Windows version
+- Edita `/Applications/DaVinci Resolve/DaVinci Resolve.app/Contents/MacOS/Resolve`.
+- Guarda una copia del binario original completo (por versión) y «Restaurar» la devuelve tal cual.
+- Después de parchear, vuelve a firmar la app con firma ad hoc (`codesign -s -`); macOS lo exige.
+- Si el binario es universal (arm64 + x86_64), parchea ambas arquitecturas.
+- La reaplicación automática usa un daemon de launchd en lugar del Programador de tareas.
+- Los datos están en `~/Library/Application Support/ResolveSplashPatcher` (ajustes, imágenes, respaldos y `patcher.log`).
 
-| Windows | macOS |
-|---|---|
-| `Resolve.exe` in Program Files | `/Applications/DaVinci Resolve/DaVinci Resolve.app/Contents/MacOS/Resolve` |
-| UAC prompt | macOS administrator password prompt |
-| Backup of the resource bytes | Backup of the **whole original binary** (kept per Resolve version); Restore puts it back, original Blackmagic signature included |
-| — | After patching, the app is **re-signed ad hoc** (`codesign -s -`). Without it macOS kills the modified binary |
-| Universal binary | Every architecture slice (arm64 / x86_64) is patched |
-| Task Scheduler | Root launch daemon `/Library/LaunchDaemons/com.resolvesplashpatcher.auto.plist` (re-applies after updates) |
-| Edge window | Browser window |
-
-Data lives in `~/Library/Application Support/ResolveSplashPatcher` (config, images, backups, log).
-
-## Command line
+## Línea de comandos
 
 ```bash
-sudo python3 splash_patcher.py --apply     # apply the saved settings
-sudo python3 splash_patcher.py --restore   # restore the original binary
-python3 splash_patcher.py --inspect        # diagnostics
+sudo ./ResolveSplashPatcher --apply     # aplicar los ajustes guardados
+sudo ./ResolveSplashPatcher --restore   # restaurar el original
+./ResolveSplashPatcher --inspect        # diagnóstico: qué encuentra en tu Resolve
 ```
 
-## Things that can go wrong on macOS
+## Licencia
 
-- **"Operation not permitted" while writing**: macOS (13+) protects app bundles. Give Terminal (or
-  the app you launch from) *Full Disk Access* or *App Management* in System Settings → Privacy &
-  Security, then try again.
-- **Resolve will not open after patching**: run **Restore original** (or reinstall Resolve).
-- **Resolve updates**: the update restores the stock splash. Click Apply again, or enable
-  "Re-apply after updates" (installs the launch daemon).
-- Re-signing replaces Blackmagic's signature with an ad hoc one. Resolve itself should run, but
-  features that rely on the original signature (for example some third-party plugins that check
-  the host's signature) could be affected. Restore returns everything to the original.
-
-## How it works
-
-The splash screens are Qt resources compiled into the Resolve binary (1x 1110×490 and @2x
-2220×980). The patcher finds the resource tables by signature, treats the old splash PNGs as free
-space, writes your lossless PNGs there and repoints the table. See the original project for details.
-
-## License
-
-MIT, same as the original project.
+MIT, igual que el proyecto original.

@@ -116,67 +116,54 @@ class PatchError(Exception):
 # Localisation of messages shown to the user (the interface has its own string table)
 # --------------------------------------------------------------------------------------
 
-LANG = "en"
+LANG = "es"
 MESSAGES = {
-    "zstd": ("zstd-compressed resources are not supported", "zstd-сжатые ресурсы не поддерживаются"),
-    "no_data_table": ("Could not find the resource data table", "Не удалось найти таблицу данных ресурсов"),
-    "no_resources": ("No splash screen resources found in the Resolve binary. The format may differ on macOS; run --inspect. "
-                     "Resolve version.", "В Resolve.exe не найдены ресурсы заставки. Возможно, формат изменился "
-                     "в новой версии Resolve."),
-    "close_for_restore": ("Close DaVinci Resolve before restoring.", "Закройте DaVinci Resolve перед восстановлением."),
-    "no_backup": ("No backup found for this Resolve version. Repair Resolve with its installer.",
-                  "Резервная копия для этой версии не найдена. Восстановите Resolve через установщик (Repair)."),
-    "restoring": ("Restoring the original splash screens…", "Восстановление оригинальных заставок…"),
-    "restore_failed": ("Restore failed: the patch marker is still present",
-                       "Восстановление не удалось: метка патча всё ещё на месте"),
-    "restored": ("Original splash screens restored", "Оригинальные заставки восстановлены"),
-    "bad_image": ("Could not open image “{name}”", "Не удалось открыть изображение «{name}»"),
-    "no_marker_space": ("No room left for the patch marker", "Нет места для служебной метки"),
-    "not_found": ("File not found: {path}", "Файл не найден: {path}"),
-    "resolve_running": ("DaVinci Resolve is running. Close it and try again.",
-                        "DaVinci Resolve запущен. Закройте его и попробуйте снова."),
-    "no_images": ("No images selected", "Не выбрано ни одного изображения"),
-    "analyzing": ("Reading Resolve…", "Анализ Resolve…"),
-    "patched_no_backup": ("Resolve is already patched but the backup is missing. "
-                          "Reinstall Resolve.",
-                          "Resolve.exe уже пропатчен, но резервная копия не найдена. "
-                          "Восстановите Resolve через установщик (Repair)."),
-    "rollback": ("Returning to the original layout…", "Возврат к исходной раскладке…"),
-    "rollback_failed": ("Could not return to the original resource layout",
-                        "Не удалось вернуть исходную раскладку ресурсов"),
-    "all_original": ("Every slot is set to Original, nothing to apply",
-                     "Все слоты оставлены оригинальными, применять нечего"),
-    "preparing": ("Preparing {name} ({group})", "Подготовка {name} ({group})"),
-    "no_space": ("The images don't fit even after compression. Use fewer images.",
-                 "Изображения не помещаются даже после сжатия. Выберите меньше картинок."),
-    "quantizing": ("Low on space, reducing colours: {name}", "Мало места, сжимаю палитрой: {name}"),
-    "writing": ("Writing Resolve…", "Запись в Resolve…"),
-    "verifying": ("Verifying…", "Проверка…"),
-    "verify_marker": ("Verification failed: no marker in set {group}",
-                      "Проверка не пройдена: нет метки в наборе {group}"),
-    "verify_slot": ("Verification failed for slot {num} ({group})", "Проверка не пройдена для слота {num} ({group})"),
-    "done": ("Done", "Готово"),
-    "task_failed": ("Could not create the scheduled task: {err}", "Не удалось создать задачу: {err}"),
-    "uac_denied": ("Administrator permission was declined", "Запрос прав администратора отклонён"),
-    "uac_failed": ("Could not start the process as administrator",
-                   "Не удалось запустить процесс с правами администратора"),
-    "exe_missing": ("Resolve binary not found. Choose its location.", "Resolve не найден. Укажите путь к нему."),
-    "busy": ("Another operation is already running", "Уже выполняется другая операция"),
-    "waiting_admin": ("Waiting for administrator permission…", "Ожидание прав администратора…"),
-    "op_failed": ("The operation failed (see patcher.log)", "Операция завершилась с ошибкой (см. patcher.log)"),
-    "sign_failed": ("Re-signing the app failed: {err}", "Не удалось переподписать приложение: {err}"),
-    "pick_exe": ("Choose the Resolve binary", "Выберите бинарный файл Resolve"),
+    'zstd': ('zstd-compressed resources are not supported', 'Los recursos comprimidos con zstd no son compatibles'),
+    'no_data_table': ('Could not find the resource data table', 'No se encontró la tabla de datos de los recursos'),
+    'no_resources': ('No splash screen resources found in the Resolve binary. The format may differ on macOS; run --inspect.', 'No se encontraron las imágenes del splash en el binario de Resolve. En Mac el formato puede ser distinto; ejecuta --inspect.'),
+    'close_for_restore': ('Close DaVinci Resolve before restoring.', 'Cierra DaVinci Resolve antes de restaurar.'),
+    'no_backup': ('No backup found for this Resolve version. Reinstall Resolve.', 'No hay respaldo para esta versión de Resolve. Reinstala Resolve.'),
+    'restoring': ('Restoring the original splash screens…', 'Restaurando el splash original…'),
+    'restore_failed': ('Restore failed: the patch marker is still present', 'La restauración falló: la marca del parche sigue presente'),
+    'restored': ('Original splash screens restored', 'Splash original restaurado'),
+    'bad_image': ('Could not open image “{name}”', 'No se pudo abrir la imagen «{name}»'),
+    'no_marker_space': ('No room left for the patch marker', 'No hay espacio para la marca del parche'),
+    'not_found': ('File not found: {path}', 'Archivo no encontrado: {path}'),
+    'resolve_running': ('DaVinci Resolve is running. Close it and try again.', 'DaVinci Resolve está abierto. Ciérralo e inténtalo de nuevo.'),
+    'no_images': ('No images selected', 'No hay imágenes seleccionadas'),
+    'analyzing': ('Reading Resolve…', 'Leyendo Resolve…'),
+    'patched_no_backup': ('Resolve is already patched but the backup is missing. Reinstall Resolve.', 'Resolve ya está parchado pero falta el respaldo. Reinstala Resolve.'),
+    'rollback': ('Returning to the original layout…', 'Volviendo al original…'),
+    'rollback_failed': ('Could not return to the original resource layout', 'No se pudo volver al original'),
+    'all_original': ('Every slot is set to Original, nothing to apply', 'Todos los espacios están en «Original», no hay nada que aplicar'),
+    'preparing': ('Preparing {name} ({group})', 'Preparando {name} ({group})'),
+    'no_space': ("The images don't fit even after compression. Use fewer images.", 'Las imágenes no caben ni comprimidas. Usa menos imágenes.'),
+    'quantizing': ('Low on space, reducing colours: {name}', 'Poco espacio, reduciendo colores: {name}'),
+    'writing': ('Writing Resolve…', 'Escribiendo en Resolve…'),
+    'verifying': ('Verifying…', 'Verificando…'),
+    'verify_marker': ('Verification failed: no marker in set {group}', 'Falló la verificación: falta la marca en el conjunto {group}'),
+    'verify_slot': ('Verification failed for slot {num} ({group})', 'Falló la verificación del espacio {num} ({group})'),
+    'done': ('Done', 'Listo'),
+    'task_failed': ('Could not create the scheduled task: {err}', 'No se pudo crear la tarea automática: {err}'),
+    'uac_denied': ('Administrator permission was declined', 'Se rechazó el permiso de administrador'),
+    'uac_failed': ('Could not start the process as administrator', 'No se pudo iniciar el proceso como administrador'),
+    'exe_missing': ('Resolve binary not found. Choose its location.', 'No se encontró Resolve. Indica su ubicación.'),
+    'busy': ('Another operation is already running', 'Ya hay otra operación en curso'),
+    'waiting_admin': ('Waiting for administrator permission…', 'Esperando permiso de administrador…'),
+    'op_failed': ('The operation failed (see patcher.log)', 'La operación falló (revisa patcher.log)'),
+    'sign_failed': ('Re-signing the app failed: {err}', 'No se pudo volver a firmar la app: {err}'),
+    'pick_exe': ('Choose the Resolve binary', 'Elige el binario de Resolve'),
 }
 
 
 def tr(key, **kw):
-    en, ru = MESSAGES[key]
-    return (ru if LANG == "ru" else en).format(**kw)
+    en, es = MESSAGES[key]
+    return (es if LANG == "es" else en).format(**kw)
 
 
 def set_lang(lang):
     global LANG
-    LANG = "ru" if lang == "ru" else "en"
+    LANG = "en" if lang == "en" else "es"
 
 
 # --------------------------------------------------------------------------------------
@@ -720,7 +707,7 @@ def encode_png(img, quantize=False):
 # --------------------------------------------------------------------------------------
 
 def default_config():
-    return {"exe": DEFAULT_EXE, "images": [], "slots": {}, "darken": True, "lang": "en"}
+    return {"exe": DEFAULT_EXE, "images": [], "slots": {}, "darken": True, "lang": "es"}
 
 
 def load_config():
@@ -1377,7 +1364,7 @@ def run_server(open_window=True):
                             app.cfg["slots"] = data["slots"]
                         if "darken" in data:
                             app.cfg["darken"] = bool(data["darken"])
-                        if data.get("lang") in ("en", "ru"):
+                        if data.get("lang") in ("en", "es"):
                             app.cfg["lang"] = data["lang"]
                             set_lang(data["lang"])
                         save_config(app.cfg)
