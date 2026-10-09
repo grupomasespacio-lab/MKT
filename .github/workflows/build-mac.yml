@@ -24,7 +24,7 @@ jobs:
       - name: Build the app (no Terminal)
         run: |
           APP="dist/Resolve Splash Patcher.app"
-          osacompile -o "$APP" launcher.applescript
+          osacompile -s -o "$APP" launcher.applescript
           cp dist/ResolveSplashPatcher "$APP/Contents/Resources/ResolveSplashPatcher"
           chmod +x "$APP/Contents/Resources/ResolveSplashPatcher"
           # icon (best effort)

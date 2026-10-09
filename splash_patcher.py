@@ -1569,6 +1569,18 @@ def run_server(open_window=True, background=False):
                 log("ERROR: " + "".join(traceback.format_exception(e)))
                 return self.send(500, {"error": str(e)})
 
+    import atexit
+    import signal
+
+    def _on_signal(signum, frame):
+        log(f"server stopped by signal {signum}")
+        os._exit(0)
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        try:
+            signal.signal(sig, _on_signal)
+        except (ValueError, OSError):
+            pass
+    atexit.register(lambda: log("server process exiting"))
     srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
     url = f"http://127.0.0.1:{srv.server_address[1]}/{token}/"
     log(f"Interface at {url}")
@@ -1578,15 +1590,10 @@ def run_server(open_window=True, background=False):
             time.sleep(2)
             if app.job.get("running"):
                 continue
-            if not background:
-                # console build: stays up until the Terminal window is closed (Ctrl+C)
-                continue
-            # app build (no Terminal): quit when the browser tab is closed. Browsers throttle
-            # background tabs, so only a very long silence counts as "gone".
-            idle = time.time() - app.last_ping
-            if (app.bye_at and time.time() - app.bye_at > 8) or idle > 900:
-                srv.shutdown()
-                return
+            # The server's lifetime belongs to whoever started it: the Terminal window or the
+            # app (which quits it). Browsers throttle or freeze background tabs and fire
+            # "pagehide" on reloads, so page activity must never shut the server down.
+            continue
 
     threading.Thread(target=watchdog, daemon=True).start()
     if open_window:
