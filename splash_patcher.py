@@ -151,6 +151,7 @@ MESSAGES = {
     'busy': ('Another operation is already running', 'Ya hay otra operación en curso'),
     'waiting_admin': ('Waiting for administrator permission…', 'Esperando permiso de administrador…'),
     'op_failed': ('The operation failed (see patcher.log)', 'La operación falló (revisa patcher.log)'),
+    'perm_denied': ('macOS blocked the change. Open System Settings → Privacy & Security → Full Disk Access and turn on every “ResolveSplashPatcher” entry. Then quit this app (Cmd+Q) and open it again.', 'macOS bloqueó el cambio. Abre Ajustes del Sistema → Privacidad y seguridad → Acceso total al disco y activa todas las entradas «ResolveSplashPatcher». Luego cierra esta app (Cmd+Q) y ábrela de nuevo.'),
     'sudo_expired': ('The administrator session expired. Close this window and open Abrir.command again.', 'La sesión de administrador caducó. Cierra esta ventana y abre Abrir.command de nuevo.'),
     'sign_failed': ('Re-signing the app failed: {err}', 'No se pudo volver a firmar la app: {err}'),
     'pick_exe': ('Choose the Resolve binary', 'Elige el binario de Resolve'),
@@ -1167,7 +1168,8 @@ def cli(argv):
         return 0
     except Exception as e:
         log("ERROR: " + "".join(traceback.format_exception(e)))
-        progress(str(e), None, done=True, error=str(e))
+        msg = tr("perm_denied") if isinstance(e, PermissionError) else str(e)
+        progress(msg, None, done=True, error=msg)
         return 1
     finally:
         chown_app_dir()
