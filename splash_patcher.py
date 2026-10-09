@@ -1424,7 +1424,7 @@ def pick_exe_dialog(initial):
     return os.path.normpath(p) if p else None
 
 
-def run_server(open_window=True):
+def run_server(open_window=True, background=False):
     from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
     from urllib.parse import unquote
 
@@ -1578,9 +1578,15 @@ def run_server(open_window=True):
             time.sleep(2)
             if app.job.get("running"):
                 continue
-            # console build: the server stays up until the Terminal window is closed (Ctrl+C);
-            # browsers throttle background tabs, so idle time says nothing here
-            continue
+            if not background:
+                # console build: stays up until the Terminal window is closed (Ctrl+C)
+                continue
+            # app build (no Terminal): quit when the browser tab is closed. Browsers throttle
+            # background tabs, so only a very long silence counts as "gone".
+            idle = time.time() - app.last_ping
+            if (app.bye_at and time.time() - app.bye_at > 8) or idle > 900:
+                srv.shutdown()
+                return
 
     threading.Thread(target=watchdog, daemon=True).start()
     if open_window:
@@ -1609,7 +1615,7 @@ def _main():
     log(f"start argv={argv} frozen={FROZEN} python={sys.version.split()[0]} appdir={APP_DIR}")
     if any(a in argv for a in ("--apply", "--auto", "--restore", "--task-on", "--task-off", "--inspect")):
         sys.exit(cli(argv))
-    run_server(open_window="--no-window" not in argv)
+    run_server(open_window="--no-window" not in argv, background="--background" in argv)
 
 
 if __name__ == "__main__":
